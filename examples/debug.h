@@ -29,13 +29,9 @@
 #  include <config.h>
 #endif // HAVE_CONFIG_H
 
-#ifndef __STDC_FORMAT_MACROS
 // For travis and PRIu64
-#  define __STDC_FORMAT_MACROS
-#endif // __STDC_FORMAT_MACROS
-
+#define __STDC_FORMAT_MACROS
 #include <cinttypes>
-#include <string_view>
 
 #include <ngtcp2/ngtcp2.h>
 #include <nghttp3/nghttp3.h>
@@ -109,13 +105,26 @@ void print_http_begin_trailers(int64_t stream_id);
 
 void print_http_end_trailers(int64_t stream_id);
 
+void print_http_begin_push_promise(int64_t stream_id, int64_t push_id);
+
+void print_http_push_promise(int64_t stream_id, int64_t push_id,
+                             const nghttp3_rcbuf *name,
+                             const nghttp3_rcbuf *value, uint8_t flags);
+
+void print_http_end_push_promise(int64_t stream_id, int64_t push_id);
+
+void cancel_push(int64_t push_id, int64_t stream_id);
+
+void push_stream(int64_t push_id, int64_t stream_id);
+
 void print_http_request_headers(int64_t stream_id, const nghttp3_nv *nva,
                                 size_t nvlen);
 
 void print_http_response_headers(int64_t stream_id, const nghttp3_nv *nva,
                                  size_t nvlen);
 
-std::string_view secret_title(ngtcp2_crypto_level level);
+void print_http_push_promise(int64_t stream_id, int64_t push_id,
+                             const nghttp3_nv *nva, size_t nvlen);
 
 } // namespace debug
 

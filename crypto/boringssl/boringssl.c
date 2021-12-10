@@ -35,15 +35,15 @@
 #include <openssl/ssl.h>
 #include <openssl/evp.h>
 #include <openssl/hkdf.h>
-#include <openssl/aes.h>
 #include <openssl/chacha.h>
-#include <openssl/rand.h>
 
 #include "shared.h"
 
+/* Define cipher types because BoringSSL does not implement EVP
+   interface for chacha20. */
 typedef enum ngtcp2_crypto_boringssl_cipher_type {
-  NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_AES_128,
-  NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_AES_256,
+  NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_EVP_AES_128_CTR,
+  NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_EVP_AES_256_CTR,
   NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_CHACHA20,
 } ngtcp2_crypto_boringssl_cipher_type;
 
@@ -51,31 +51,22 @@ typedef struct ngtcp2_crypto_boringssl_cipher {
   ngtcp2_crypto_boringssl_cipher_type type;
 } ngtcp2_crypto_boringssl_cipher;
 
-static ngtcp2_crypto_boringssl_cipher crypto_cipher_aes_128 = {
-    NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_AES_128,
+static ngtcp2_crypto_boringssl_cipher crypto_cipher_evp_aes_128_ctr = {
+    NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_EVP_AES_128_CTR,
 };
 
-static ngtcp2_crypto_boringssl_cipher crypto_cipher_aes_256 = {
-    NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_AES_256,
+static ngtcp2_crypto_boringssl_cipher crypto_cipher_evp_aes_256_ctr = {
+    NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_EVP_AES_256_CTR,
 };
 
 static ngtcp2_crypto_boringssl_cipher crypto_cipher_chacha20 = {
     NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_CHACHA20,
 };
 
-ngtcp2_crypto_aead *ngtcp2_crypto_aead_aes_128_gcm(ngtcp2_crypto_aead *aead) {
-  return ngtcp2_crypto_aead_init(aead, (void *)EVP_aead_aes_128_gcm());
-}
-
-ngtcp2_crypto_md *ngtcp2_crypto_md_sha256(ngtcp2_crypto_md *md) {
-  md->native_handle = (void *)EVP_sha256();
-  return md;
-}
-
 ngtcp2_crypto_ctx *ngtcp2_crypto_ctx_initial(ngtcp2_crypto_ctx *ctx) {
   ngtcp2_crypto_aead_init(&ctx->aead, (void *)EVP_aead_aes_128_gcm());
   ctx->md.native_handle = (void *)EVP_sha256();
-  ctx->hp.native_handle = (void *)&crypto_cipher_aes_128;
+  ctx->hp.native_handle = (void *)&crypto_cipher_evp_aes_128_ctr;
   ctx->max_encryption = 0;
   ctx->max_decryption_failure = 0;
   return ctx;
@@ -132,9 +123,9 @@ static uint64_t crypto_ssl_get_aead_max_decryption_failure(SSL *ssl) {
 static const ngtcp2_crypto_boringssl_cipher *crypto_ssl_get_hp(SSL *ssl) {
   switch (SSL_CIPHER_get_id(SSL_get_current_cipher(ssl))) {
   case TLS1_CK_AES_128_GCM_SHA256:
-    return &crypto_cipher_aes_128;
+    return &crypto_cipher_evp_aes_128_ctr;
   case TLS1_CK_AES_256_GCM_SHA384:
-    return &crypto_cipher_aes_256;
+    return &crypto_cipher_evp_aes_256_ctr;
   case TLS1_CK_CHACHA20_POLY1305_SHA256:
     return &crypto_cipher_chacha20;
   default:
@@ -225,15 +216,19 @@ void ngtcp2_crypto_aead_ctx_free(ngtcp2_crypto_aead_ctx *aead_ctx) {
   }
 }
 
+typedef enum ngtcp2_crypto_boringssl_cipher_ctx_type {
+  NGTCP2_CRYPTO_BORINGSSL_CIPHER_CTX_TYPE_EVP,
+  NGTCP2_CRYPTO_BORINGSSL_CIPHER_CTX_TYPE_CHACHA20,
+} ngtcp2_crypto_boringssl_cipher_ctx_type;
+
 typedef struct ngtcp2_crypto_boringssl_cipher_ctx {
-  ngtcp2_crypto_boringssl_cipher_type type;
+  ngtcp2_crypto_boringssl_cipher_ctx_type type;
   union {
-    /* aes_key is an encryption key when type is either
-       NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_AES_128 or
-       NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_AES_256. */
-    AES_KEY aes_key;
+    /* ctx is EVP_CIPHER_CTX used when type ==
+       NGTCP2_CRYPTO_BORINGSSL_CIPHER_CTX_TYPE_EVP. */
+    EVP_CIPHER_CTX *ctx;
     /* key contains an encryption key when type ==
-       NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_CHACHA20. */
+       NGTCP2_CRYPTO_BORINGSSL_CIPHER_CTX_TYPE_CHACHA20. */
     uint8_t key[32];
   };
 } ngtcp2_crypto_boringssl_cipher_ctx;
@@ -243,41 +238,70 @@ int ngtcp2_crypto_cipher_ctx_encrypt_init(ngtcp2_crypto_cipher_ctx *cipher_ctx,
                                           const uint8_t *key) {
   ngtcp2_crypto_boringssl_cipher *hp_cipher = cipher->native_handle;
   ngtcp2_crypto_boringssl_cipher_ctx *ctx;
-  int rv;
-  (void)rv;
-
-  ctx = malloc(sizeof(*ctx));
-  if (ctx == NULL) {
-    return -1;
-  }
-
-  ctx->type = hp_cipher->type;
-  cipher_ctx->native_handle = ctx;
+  EVP_CIPHER_CTX *actx;
+  const EVP_CIPHER *evp_cipher;
 
   switch (hp_cipher->type) {
-  case NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_AES_128:
-    rv = AES_set_encrypt_key(key, 128, &ctx->aes_key);
-    assert(0 == rv);
-    return 0;
-  case NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_AES_256:
-    rv = AES_set_encrypt_key(key, 256, &ctx->aes_key);
-    assert(0 == rv);
-    return 0;
+  case NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_EVP_AES_128_CTR:
+    evp_cipher = EVP_aes_128_ctr();
+    break;
+  case NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_EVP_AES_256_CTR:
+    evp_cipher = EVP_aes_256_ctr();
+    break;
   case NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_CHACHA20:
+    ctx = malloc(sizeof(*ctx));
+    if (ctx == NULL) {
+      return -1;
+    }
+
+    ctx->type = NGTCP2_CRYPTO_BORINGSSL_CIPHER_CTX_TYPE_CHACHA20;
     memcpy(ctx->key, key, sizeof(ctx->key));
+
+    cipher_ctx->native_handle = ctx;
+
     return 0;
   default:
     assert(0);
-    abort();
   };
+
+  actx = EVP_CIPHER_CTX_new();
+  if (actx == NULL) {
+    return -1;
+  }
+
+  if (!EVP_EncryptInit_ex(actx, evp_cipher, NULL, key, NULL)) {
+    EVP_CIPHER_CTX_free(actx);
+    return -1;
+  }
+
+  ctx = malloc(sizeof(*ctx));
+  if (ctx == NULL) {
+    EVP_CIPHER_CTX_free(actx);
+    return -1;
+  }
+
+  ctx->type = NGTCP2_CRYPTO_BORINGSSL_CIPHER_CTX_TYPE_EVP;
+  ctx->ctx = actx;
+
+  cipher_ctx->native_handle = ctx;
+
+  return 0;
 }
 
 void ngtcp2_crypto_cipher_ctx_free(ngtcp2_crypto_cipher_ctx *cipher_ctx) {
+  ngtcp2_crypto_boringssl_cipher_ctx *ctx;
+
   if (!cipher_ctx->native_handle) {
     return;
   }
 
-  free(cipher_ctx->native_handle);
+  ctx = cipher_ctx->native_handle;
+
+  if (ctx->type == NGTCP2_CRYPTO_BORINGSSL_CIPHER_CTX_TYPE_EVP) {
+    EVP_CIPHER_CTX_free(ctx->ctx);
+  }
+
+  free(ctx);
 }
 
 int ngtcp2_crypto_hkdf_extract(uint8_t *dest, const ngtcp2_crypto_md *md,
@@ -307,32 +331,18 @@ int ngtcp2_crypto_hkdf_expand(uint8_t *dest, size_t destlen,
   return 0;
 }
 
-int ngtcp2_crypto_hkdf(uint8_t *dest, size_t destlen,
-                       const ngtcp2_crypto_md *md, const uint8_t *secret,
-                       size_t secretlen, const uint8_t *salt, size_t saltlen,
-                       const uint8_t *info, size_t infolen) {
-  const EVP_MD *prf = md->native_handle;
-
-  if (HKDF(dest, destlen, prf, secret, secretlen, salt, saltlen, info,
-           infolen) != 1) {
-    return -1;
-  }
-
-  return 0;
-}
-
 int ngtcp2_crypto_encrypt(uint8_t *dest, const ngtcp2_crypto_aead *aead,
                           const ngtcp2_crypto_aead_ctx *aead_ctx,
                           const uint8_t *plaintext, size_t plaintextlen,
                           const uint8_t *nonce, size_t noncelen,
-                          const uint8_t *aad, size_t aadlen) {
+                          const uint8_t *ad, size_t adlen) {
   const EVP_AEAD *cipher = aead->native_handle;
   EVP_AEAD_CTX *actx = aead_ctx->native_handle;
   size_t max_outlen = plaintextlen + EVP_AEAD_max_overhead(cipher);
   size_t outlen;
 
   if (EVP_AEAD_CTX_seal(actx, dest, &outlen, max_outlen, nonce, noncelen,
-                        plaintext, plaintextlen, aad, aadlen) != 1) {
+                        plaintext, plaintextlen, ad, adlen) != 1) {
     return -1;
   }
 
@@ -343,7 +353,7 @@ int ngtcp2_crypto_decrypt(uint8_t *dest, const ngtcp2_crypto_aead *aead,
                           const ngtcp2_crypto_aead_ctx *aead_ctx,
                           const uint8_t *ciphertext, size_t ciphertextlen,
                           const uint8_t *nonce, size_t noncelen,
-                          const uint8_t *aad, size_t aadlen) {
+                          const uint8_t *ad, size_t adlen) {
   EVP_AEAD_CTX *actx = aead_ctx->native_handle;
   size_t max_outlen = ciphertextlen;
   size_t outlen;
@@ -351,7 +361,7 @@ int ngtcp2_crypto_decrypt(uint8_t *dest, const ngtcp2_crypto_aead *aead,
   (void)aead;
 
   if (EVP_AEAD_CTX_open(actx, dest, &outlen, max_outlen, nonce, noncelen,
-                        ciphertext, ciphertextlen, aad, aadlen) != 1) {
+                        ciphertext, ciphertextlen, ad, adlen) != 1) {
     return -1;
   }
 
@@ -363,16 +373,23 @@ int ngtcp2_crypto_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
                           const uint8_t *sample) {
   static const uint8_t PLAINTEXT[] = "\x00\x00\x00\x00\x00";
   ngtcp2_crypto_boringssl_cipher_ctx *ctx = hp_ctx->native_handle;
+  EVP_CIPHER_CTX *actx;
+  int len;
   uint32_t counter;
 
   (void)hp;
 
   switch (ctx->type) {
-  case NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_AES_128:
-  case NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_AES_256:
-    AES_ecb_encrypt(sample, dest, &ctx->aes_key, 1);
+  case NGTCP2_CRYPTO_BORINGSSL_CIPHER_CTX_TYPE_EVP:
+    actx = ctx->ctx;
+    if (!EVP_EncryptInit_ex(actx, NULL, NULL, NULL, sample) ||
+        !EVP_EncryptUpdate(actx, dest, &len, PLAINTEXT,
+                           sizeof(PLAINTEXT) - 1) ||
+        !EVP_EncryptFinal_ex(actx, dest + sizeof(PLAINTEXT) - 1, &len)) {
+      return -1;
+    }
     return 0;
-  case NGTCP2_CRYPTO_BORINGSSL_CIPHER_TYPE_CHACHA20:
+  case NGTCP2_CRYPTO_BORINGSSL_CIPHER_CTX_TYPE_CHACHA20:
 #if defined(WORDS_BIGENDIAN)
     counter = (uint32_t)sample[0] + (uint32_t)(sample[1] << 8) +
               (uint32_t)(sample[2] << 16) + (uint32_t)(sample[3] << 24);
@@ -503,7 +520,6 @@ ngtcp2_crypto_level ngtcp2_crypto_boringssl_from_ssl_encryption_level(
     return NGTCP2_CRYPTO_LEVEL_APPLICATION;
   default:
     assert(0);
-    abort();
   }
 }
 
@@ -520,26 +536,5 @@ enum ssl_encryption_level_t ngtcp2_crypto_boringssl_from_ngtcp2_crypto_level(
     return ssl_encryption_early_data;
   default:
     assert(0);
-    abort();
   }
-}
-
-int ngtcp2_crypto_get_path_challenge_data_cb(ngtcp2_conn *conn, uint8_t *data,
-                                             void *user_data) {
-  (void)conn;
-  (void)user_data;
-
-  if (RAND_bytes(data, NGTCP2_PATH_CHALLENGE_DATALEN) != 1) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
-  }
-
-  return 0;
-}
-
-int ngtcp2_crypto_random(uint8_t *data, size_t datalen) {
-  if (RAND_bytes(data, datalen) != 1) {
-    return -1;
-  }
-
-  return 0;
 }

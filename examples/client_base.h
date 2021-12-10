@@ -153,8 +153,8 @@ struct Config {
   // static_secret is used to derive keying materials for Stateless
   // Retry token.
   std::array<uint8_t, 32> static_secret;
-  // cc_algo is the congestion controller algorithm.
-  ngtcp2_cc_algo cc_algo;
+  // cc is the congestion controller algorithm.
+  std::string_view cc;
   // token_file is a path to file to read or write token from
   // NEW_TOKEN frame.
   std::string_view token_file;
@@ -163,9 +163,6 @@ struct Config {
   std::string_view sni;
   // initial_rtt is an initial RTT.
   ngtcp2_duration initial_rtt;
-  // max_udp_payload_size is the maximum UDP payload size that client
-  // transmits.
-  size_t max_udp_payload_size;
 };
 
 struct Buffer {
@@ -185,6 +182,14 @@ struct Buffer {
   uint8_t *tail;
 };
 
+struct Crypto {
+  /* data is unacknowledged data. */
+  std::deque<Buffer> data;
+  /* acked_offset is the size of acknowledged crypto data removed from
+     |data| so far */
+  uint64_t acked_offset;
+};
+
 class ClientBase {
 public:
   ClientBase();
@@ -198,6 +203,8 @@ public:
                 size_t secretlen);
   void write_client_handshake(ngtcp2_crypto_level crypto_level,
                               const uint8_t *data, size_t datalen);
+  void remove_tx_crypto_data(ngtcp2_crypto_level crypto_level, uint64_t offset,
+                             uint64_t datalen);
   void set_tls_alert(uint8_t alert);
 
   int write_transport_params(const char *path,
@@ -211,6 +218,7 @@ public:
 protected:
   TLSClientSession tls_session_;
   FILE *qlog_;
+  Crypto crypto_[3];
   ngtcp2_conn *conn_;
   QUICError last_error_;
   std::function<int()> application_rx_key_cb_;

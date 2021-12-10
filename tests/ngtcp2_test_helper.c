@@ -86,7 +86,7 @@ static int null_encrypt(uint8_t *dest, const ngtcp2_crypto_aead *aead,
                         const ngtcp2_crypto_aead_ctx *aead_ctx,
                         const uint8_t *plaintext, size_t plaintextlen,
                         const uint8_t *nonce, size_t noncelen,
-                        const uint8_t *aad, size_t aadlen) {
+                        const uint8_t *ad, size_t adlen) {
   (void)dest;
   (void)aead;
   (void)aead_ctx;
@@ -94,8 +94,8 @@ static int null_encrypt(uint8_t *dest, const ngtcp2_crypto_aead *aead,
   (void)plaintextlen;
   (void)nonce;
   (void)noncelen;
-  (void)aad;
-  (void)aadlen;
+  (void)ad;
+  (void)adlen;
   memset(dest + plaintextlen, 0, NGTCP2_FAKE_AEAD_OVERHEAD);
   return 0;
 }
@@ -110,27 +110,27 @@ static int null_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
   return 0;
 }
 
-size_t write_single_frame_pkt(uint8_t *out, size_t outlen,
+size_t write_single_frame_pkt(ngtcp2_conn *conn, uint8_t *out, size_t outlen,
                               const ngtcp2_cid *dcid, int64_t pkt_num,
-                              ngtcp2_frame *fr, ngtcp2_crypto_km *ckm) {
-  return write_single_frame_pkt_flags(out, outlen, NGTCP2_PKT_FLAG_NONE, dcid,
-                                      pkt_num, fr, ckm);
+                              ngtcp2_frame *fr) {
+  return write_single_frame_pkt_flags(conn, out, outlen, NGTCP2_PKT_FLAG_NONE,
+                                      dcid, pkt_num, fr);
 }
 
-size_t write_single_frame_pkt_flags(uint8_t *out, size_t outlen, uint8_t flags,
+size_t write_single_frame_pkt_flags(ngtcp2_conn *conn, uint8_t *out,
+                                    size_t outlen, uint8_t flags,
                                     const ngtcp2_cid *dcid, int64_t pkt_num,
-                                    ngtcp2_frame *fr, ngtcp2_crypto_km *ckm) {
+                                    ngtcp2_frame *fr) {
   ngtcp2_crypto_cc cc;
   ngtcp2_ppe ppe;
   ngtcp2_pkt_hd hd;
   int rv;
   ngtcp2_ssize n;
-  (void)rv;
 
   memset(&cc, 0, sizeof(cc));
   cc.encrypt = null_encrypt;
   cc.hp_mask = null_hp_mask;
-  cc.ckm = ckm;
+  cc.ckm = conn->pktns.crypto.rx.ckm;
   cc.aead.max_overhead = NGTCP2_FAKE_AEAD_OVERHEAD;
 
   ngtcp2_pkt_hd_init(&hd, flags, NGTCP2_PKT_SHORT, dcid, NULL, pkt_num, 4,
@@ -147,28 +147,27 @@ size_t write_single_frame_pkt_flags(uint8_t *out, size_t outlen, uint8_t flags,
   return (size_t)n;
 }
 
-size_t write_pkt(uint8_t *out, size_t outlen, const ngtcp2_cid *dcid,
-                 int64_t pkt_num, ngtcp2_frame *fr, size_t frlen,
-                 ngtcp2_crypto_km *ckm) {
-  return write_pkt_flags(out, outlen, NGTCP2_PKT_FLAG_NONE, dcid, pkt_num, fr,
-                         frlen, ckm);
+size_t write_pkt(ngtcp2_conn *conn, uint8_t *out, size_t outlen,
+                 const ngtcp2_cid *dcid, int64_t pkt_num, ngtcp2_frame *fr,
+                 size_t frlen) {
+  return write_pkt_flags(conn, out, outlen, NGTCP2_PKT_FLAG_NONE, dcid, pkt_num,
+                         fr, frlen);
 }
 
-size_t write_pkt_flags(uint8_t *out, size_t outlen, uint8_t flags,
-                       const ngtcp2_cid *dcid, int64_t pkt_num,
-                       ngtcp2_frame *fr, size_t frlen, ngtcp2_crypto_km *ckm) {
+size_t write_pkt_flags(ngtcp2_conn *conn, uint8_t *out, size_t outlen,
+                       uint8_t flags, const ngtcp2_cid *dcid, int64_t pkt_num,
+                       ngtcp2_frame *fr, size_t frlen) {
   ngtcp2_crypto_cc cc;
   ngtcp2_ppe ppe;
   ngtcp2_pkt_hd hd;
   int rv;
   ngtcp2_ssize n;
   size_t i;
-  (void)rv;
 
   memset(&cc, 0, sizeof(cc));
   cc.encrypt = null_encrypt;
   cc.hp_mask = null_hp_mask;
-  cc.ckm = ckm;
+  cc.ckm = conn->pktns.crypto.rx.ckm;
   cc.aead.max_overhead = NGTCP2_FAKE_AEAD_OVERHEAD;
 
   ngtcp2_pkt_hd_init(&hd, flags, NGTCP2_PKT_SHORT, dcid, NULL, pkt_num, 4,
@@ -189,20 +188,19 @@ size_t write_pkt_flags(uint8_t *out, size_t outlen, uint8_t flags,
   return (size_t)n;
 }
 
-size_t write_single_frame_pkt_without_conn_id(uint8_t *out, size_t outlen,
-                                              int64_t pkt_num, ngtcp2_frame *fr,
-                                              ngtcp2_crypto_km *ckm) {
+size_t write_single_frame_pkt_without_conn_id(ngtcp2_conn *conn, uint8_t *out,
+                                              size_t outlen, int64_t pkt_num,
+                                              ngtcp2_frame *fr) {
   ngtcp2_crypto_cc cc;
   ngtcp2_ppe ppe;
   ngtcp2_pkt_hd hd;
   int rv;
   ngtcp2_ssize n;
-  (void)rv;
 
   memset(&cc, 0, sizeof(cc));
   cc.encrypt = null_encrypt;
   cc.hp_mask = null_hp_mask;
-  cc.ckm = ckm;
+  cc.ckm = conn->pktns.crypto.rx.ckm;
   cc.aead.max_overhead = NGTCP2_FAKE_AEAD_OVERHEAD;
 
   ngtcp2_pkt_hd_init(&hd, NGTCP2_PKT_FLAG_NONE, NGTCP2_PKT_SHORT, NULL, NULL,
@@ -228,7 +226,6 @@ static size_t write_single_frame_handshake_pkt_generic(
   ngtcp2_pkt_hd hd;
   int rv;
   ngtcp2_ssize n;
-  (void)rv;
 
   memset(&cc, 0, sizeof(cc));
   cc.encrypt = null_encrypt;
@@ -304,7 +301,6 @@ size_t write_handshake_pkt(uint8_t *out, size_t outlen, uint8_t pkt_type,
   int rv;
   ngtcp2_ssize n;
   size_t i;
-  (void)rv;
 
   memset(&cc, 0, sizeof(cc));
   cc.encrypt = null_encrypt;
@@ -343,7 +339,6 @@ size_t write_handshake_pkt(uint8_t *out, size_t outlen, uint8_t pkt_type,
 ngtcp2_strm *open_stream(ngtcp2_conn *conn, int64_t stream_id) {
   ngtcp2_strm *strm;
   int rv;
-  (void)rv;
 
   strm = ngtcp2_mem_malloc(conn->mem, sizeof(ngtcp2_strm));
   assert(strm);
@@ -501,6 +496,6 @@ void path_init(ngtcp2_path_storage *path, uint32_t local_addr,
   addr_init(&la, local_addr, local_port);
   addr_init(&ra, remote_addr, remote_port);
 
-  ngtcp2_path_storage_init(path, (struct sockaddr *)&la, sizeof(la),
+  ngtcp2_path_storage_init(path, (struct sockaddr *)&la, sizeof(la), NULL,
                            (struct sockaddr *)&ra, sizeof(ra), NULL);
 }

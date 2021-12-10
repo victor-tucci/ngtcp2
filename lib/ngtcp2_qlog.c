@@ -185,8 +185,8 @@ static uint8_t *write_pair_cid_impl(uint8_t *p, const uint8_t *name,
 
 static uint8_t *write_common_fields(uint8_t *p, const ngtcp2_cid *odcid) {
   p = write_verbatim(
-      p, "\"common_fields\":{\"protocol_type\":[\"QUIC\"],\"time_format\":"
-         "\"relative\",\"reference_time\":0,\"group_id\":");
+      p, "\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"time_format\":"
+         "\"relative\",\"reference_time\":\"0\",\"group_id\":");
   p = write_cid(p, odcid);
   *p++ = '}';
   return p;
@@ -215,7 +215,7 @@ void ngtcp2_qlog_start(ngtcp2_qlog *qlog, const ngtcp2_cid *odcid, int server) {
   }
 
   p = write_verbatim(
-      p, "\x1e{\"qlog_format\":\"JSON-SEQ\",\"qlog_version\":\"0.3\",");
+      p, "{\"qlog_format\":\"NDJSON\",\"qlog_version\":\"draft-02\",");
   p = write_trace(p, server, odcid);
   p = write_verbatim(p, "}\n");
 
@@ -669,7 +669,6 @@ static void qlog_pkt_write_start(ngtcp2_qlog *qlog, int sent) {
   ngtcp2_buf_reset(&qlog->buf);
   p = qlog->buf.last;
 
-  *p++ = '\x1e';
   *p++ = '{';
   p = qlog_write_time(qlog, p);
   p = write_verbatim(p, ",\"name\":");
@@ -691,12 +690,12 @@ static void qlog_pkt_write_end(ngtcp2_qlog *qlog, const ngtcp2_pkt_hd *hd,
   }
 
   /*
-   * ],"header":,"raw":{"length":0000000000000000000}}}
+   * ],"header":,"raw":{"packet_size":0000000000000000000}}}
    *
    * plus, terminating LF
    */
 #define NGTCP2_QLOG_PKT_WRITE_END_OVERHEAD                                     \
-  (1 + 50 + NGTCP2_QLOG_PKT_HD_OVERHEAD)
+  (1 + 55 + NGTCP2_QLOG_PKT_HD_OVERHEAD)
 
   assert(ngtcp2_buf_left(&qlog->buf) >= NGTCP2_QLOG_PKT_WRITE_END_OVERHEAD);
   assert(ngtcp2_buf_len(&qlog->buf));
@@ -708,7 +707,7 @@ static void qlog_pkt_write_end(ngtcp2_qlog *qlog, const ngtcp2_pkt_hd *hd,
 
   p = write_verbatim(p, "],\"header\":");
   p = write_pkt_hd(p, hd);
-  p = write_verbatim(p, ",\"raw\":{\"length\":");
+  p = write_verbatim(p, ",\"raw\":{\"packet_size\":");
   p = write_number(p, pktlen);
   p = write_verbatim(p, "}}}\n");
 
@@ -935,7 +934,6 @@ void ngtcp2_qlog_parameters_set_transport_params(
     return;
   }
 
-  *p++ = '\x1e';
   *p++ = '{';
   p = qlog_write_time(qlog, p);
   p = write_verbatim(
@@ -1019,8 +1017,6 @@ void ngtcp2_qlog_parameters_set_transport_params(
   *p++ = ',';
   p = write_pair_number(p, "max_datagram_frame_size",
                         params->max_datagram_frame_size);
-  *p++ = ',';
-  p = write_pair_bool(p, "grease_quic_bit", params->grease_quic_bit);
   p = write_verbatim(p, "}}\n");
 
   qlog->write(qlog->user_data, NGTCP2_QLOG_WRITE_FLAG_NONE, buf,
@@ -1036,7 +1032,6 @@ void ngtcp2_qlog_metrics_updated(ngtcp2_qlog *qlog,
     return;
   }
 
-  *p++ = '\x1e';
   *p++ = '{';
   p = qlog_write_time(qlog, p);
   p = write_verbatim(p, ",\"name\":\"recovery:metrics_updated\",\"data\":{");
@@ -1076,7 +1071,6 @@ void ngtcp2_qlog_pkt_lost(ngtcp2_qlog *qlog, ngtcp2_rtb_entry *ent) {
     return;
   }
 
-  *p++ = '\x1e';
   *p++ = '{';
   p = qlog_write_time(qlog, p);
   p = write_verbatim(
@@ -1102,7 +1096,6 @@ void ngtcp2_qlog_retry_pkt_received(ngtcp2_qlog *qlog,
     return;
   }
 
-  *p++ = '\x1e';
   *p++ = '{';
   p = qlog_write_time(qlog, p);
   p = write_verbatim(

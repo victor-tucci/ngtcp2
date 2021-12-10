@@ -31,6 +31,5 @@
 
 void test_ngtcp2_vec_split(void);
 void test_ngtcp2_vec_merge(void);
-void test_ngtcp2_vec_len_varint(void);
 
 #endif /* NGTCP2_VEC_TEST_H */

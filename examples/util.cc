@@ -261,34 +261,16 @@ std::string straddr(const sockaddr *sa, socklen_t salen) {
   return res;
 }
 
-std::string_view strccalgo(ngtcp2_cc_algo cc_algo) {
-  switch (cc_algo) {
-  case NGTCP2_CC_ALGO_RENO:
-    return "reno";
-  case NGTCP2_CC_ALGO_CUBIC:
-    return "cubic";
-  case NGTCP2_CC_ALGO_BBR:
-    return "bbr";
-  case NGTCP2_CC_ALGO_BBR2:
-    return "bbr2";
-  default:
-    assert(0);
-    abort();
-  }
-}
-
 namespace {
 constexpr bool rws(char c) { return c == '\t' || c == ' '; }
 } // namespace
 
-std::optional<std::unordered_map<std::string, std::string>>
-read_mime_types(const std::string_view &filename) {
-  std::ifstream f(filename.data());
+int read_mime_types(std::unordered_map<std::string, std::string> &dest,
+                    const char *filename) {
+  std::ifstream f(filename);
   if (!f) {
-    return {};
+    return -1;
   }
-
-  std::unordered_map<std::string, std::string> dest;
 
   std::string line;
   while (std::getline(f, line)) {
@@ -313,7 +295,7 @@ read_mime_types(const std::string_view &filename) {
     }
   }
 
-  return dest;
+  return 0;
 }
 
 std::string format_duration(ngtcp2_duration n) {
@@ -336,56 +318,51 @@ std::string format_duration(ngtcp2_duration n) {
 }
 
 namespace {
-std::optional<std::pair<uint64_t, size_t>>
+std::tuple<uint64_t, size_t, int>
 parse_uint_internal(const std::string_view &s) {
   uint64_t res = 0;
 
   if (s.empty()) {
-    return {};
+    return {0, 0, -1};
   }
 
   for (size_t i = 0; i < s.size(); ++i) {
     auto c = s[i];
     if (c < '0' || '9' < c) {
-      return {{res, i}};
+      return {res, i, 0};
     }
 
     auto d = c - '0';
     if (res > (std::numeric_limits<uint64_t>::max() - d) / 10) {
-      return {};
+      return {0, i, -1};
     }
 
     res *= 10;
     res += d;
   }
 
-  return {{res, s.size()}};
+  return {res, s.size(), 0};
 }
 } // namespace
 
-std::optional<uint64_t> parse_uint(const std::string_view &s) {
-  auto o = parse_uint_internal(s);
-  if (!o) {
-    return {};
+std::pair<uint64_t, int> parse_uint(const std::string_view &s) {
+  auto [res, idx, rv] = parse_uint_internal(s);
+  if (rv != 0 || idx != s.size()) {
+    return {0, -1};
   }
-  auto [res, idx] = *o;
-  if (idx != s.size()) {
-    return {};
-  }
-  return res;
+  return {res, 0};
 }
 
-std::optional<uint64_t> parse_uint_iec(const std::string_view &s) {
-  auto o = parse_uint_internal(s);
-  if (!o) {
-    return {};
+std::pair<uint64_t, int> parse_uint_iec(const std::string_view &s) {
+  auto [res, idx, rv] = parse_uint_internal(s);
+  if (rv != 0) {
+    return {0, rv};
   }
-  auto [res, idx] = *o;
   if (idx == s.size()) {
-    return res;
+    return {res, 0};
   }
   if (idx + 1 != s.size()) {
-    return {};
+    return {0, -1};
   }
 
   uint64_t m;
@@ -403,24 +380,23 @@ std::optional<uint64_t> parse_uint_iec(const std::string_view &s) {
     m = 1 << 10;
     break;
   default:
-    return {};
+    return {0, -1};
   }
 
   if (res > std::numeric_limits<uint64_t>::max() / m) {
-    return {};
+    return {0, -1};
   }
 
-  return res * m;
+  return {res * m, 0};
 }
 
-std::optional<uint64_t> parse_duration(const std::string_view &s) {
-  auto o = parse_uint_internal(s);
-  if (!o) {
-    return {};
+std::pair<uint64_t, int> parse_duration(const std::string_view &s) {
+  auto [res, idx, rv] = parse_uint_internal(s);
+  if (rv != 0) {
+    return {0, rv};
   }
-  auto [res, idx] = *o;
   if (idx == s.size()) {
-    return res * NGTCP2_SECONDS;
+    return {res * NGTCP2_SECONDS, 0};
   }
 
   uint64_t m;
@@ -439,7 +415,7 @@ std::optional<uint64_t> parse_duration(const std::string_view &s) {
       m = NGTCP2_SECONDS;
       break;
     default:
-      return {};
+      return {0, -1};
     }
   } else if (idx + 2 == s.size() && (s[idx + 1] == 's' || s[idx + 1] == 'S')) {
     switch (s[idx]) {
@@ -453,19 +429,19 @@ std::optional<uint64_t> parse_duration(const std::string_view &s) {
       break;
     case 'N':
     case 'n':
-      return res;
+      return {res, 0};
     default:
-      return {};
+      return {0, -1};
     }
   } else {
-    return {};
+    return {0, -1};
   }
 
   if (res > std::numeric_limits<uint64_t>::max() / m) {
-    return {};
+    return {0, -1};
   }
 
-  return res * m;
+  return {res * m, 0};
 }
 
 namespace {

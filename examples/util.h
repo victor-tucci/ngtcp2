@@ -32,7 +32,6 @@
 
 #include <sys/socket.h>
 
-#include <optional>
 #include <string>
 #include <random>
 #include <unordered_map>
@@ -150,9 +149,6 @@ std::string make_cid_key(const uint8_t *cid, size_t cidlen);
 // straddr stringifies |sa| of length |salen| in a format "[IP]:PORT".
 std::string straddr(const sockaddr *sa, socklen_t salen);
 
-// strccalgo stringifies |cc_algo|.
-std::string_view strccalgo(ngtcp2_cc_algo cc_algo);
-
 template <typename T, size_t N>
 bool streq_l(const T (&a)[N], const nghttp3_vec &b) {
   return N - 1 == b.len && memcmp(a, b.base, N - 1) == 0;
@@ -206,10 +202,10 @@ template <typename InputIt> std::string b64encode(InputIt first, InputIt last) {
 }
 
 // read_mime_types reads "MIME media types and the extensions" file
-// denoted by |filename| and returns the mapping of extension to MIME
-// media type.
-std::optional<std::unordered_map<std::string, std::string>>
-read_mime_types(const std::string_view &filename);
+// denoted by |filename| and stores the mapping of extension to MIME
+// media type in |dest|.  It returns 0 if it succeeds, or -1.
+int read_mime_types(std::unordered_map<std::string, std::string> &dest,
+                    const char *filename);
 
 // format_uint converts |n| into string.
 template <typename T> std::string format_uint(T n) {
@@ -252,24 +248,19 @@ template <typename T> std::string format_uint_iec(T n) {
 std::string format_duration(ngtcp2_duration n);
 
 // parse_uint parses |s| as 64-bit unsigned integer.  If it cannot
-// parse |s|, the return value does not contain a value.
-std::optional<uint64_t> parse_uint(const std::string_view &s);
+// parse |s|, it returns -1 as the second return value.
+std::pair<uint64_t, int> parse_uint(const std::string_view &s);
 
 // parse_uint_iec parses |s| as 64-bit unsigned integer.  It accepts
 // IEC unit letter (either "G", "M", or "K") in |s|.  If it cannot
-// parse |s|, the return value does not contain a value.
-std::optional<uint64_t> parse_uint_iec(const std::string_view &s);
+// parse |s|, it returns -1 as the second return value.
+std::pair<uint64_t, int> parse_uint_iec(const std::string_view &s);
 
 // parse_duration parses |s| as 64-bit unsigned integer.  It accepts a
 // unit (either "h", "m", "s", "ms", "us", or "ns") in |s|.  If no
 // unit is present, the unit "s" is assumed.  If it cannot parse |s|,
-// the return value does not contain a value.
-std::optional<uint64_t> parse_duration(const std::string_view &s);
-
-// generate_secure_random generates a cryptographically secure pseudo
-// random data of |datalen| bytes and stores to the buffer pointed by
-// |data|.
-int generate_secure_random(uint8_t *data, size_t datalen);
+// it returns -1 as the second return value.
+std::pair<uint64_t, int> parse_duration(const std::string_view &s);
 
 // generate_secret generates secret and writes it to the buffer
 // pointed by |secret| of length |secretlen|.  Currently, |secretlen|
@@ -330,7 +321,7 @@ int make_socket_nonblocking(int fd);
 
 int create_nonblock_socket(int domain, int type, int protocol);
 
-std::optional<std::string> read_token(const std::string_view &filename);
+std::pair<std::string, int> read_token(const std::string_view &filename);
 int write_token(const std::string_view &filename, const uint8_t *token,
                 size_t tokenlen);
 

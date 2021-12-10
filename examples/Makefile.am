@@ -30,8 +30,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/third-party \
 	@LIBEV_CFLAGS@ \
 	@LIBNGHTTP3_CFLAGS@ \
-	@DEFS@ \
-	@EXTRA_DEFS@
+	@DEFS@
 AM_LDFLAGS = -no-install \
 	@LIBTOOL_LDFLAGS@
 LDADD = $(top_builddir)/lib/libngtcp2.la \
@@ -42,39 +41,26 @@ LDADD = $(top_builddir)/lib/libngtcp2.la \
 SERVER_SRCS = \
 	server_base.cc server_base.h \
 	tls_server_context.h \
-	tls_server_session.h \
 	template.h \
 	debug.cc debug.h \
 	util.cc util.h \
 	shared.cc shared.h \
-	http.cc http.h \
-	network.h
+	http.cc http.h
 
 CLIENT_SRCS = \
 	client_base.cc client_base.h \
 	tls_client_context.h \
-	tls_client_session.h \
 	template.h \
 	debug.cc debug.h \
 	util.cc util.h \
-	shared.cc shared.h \
-	network.h
+	shared.cc shared.h
 
 noinst_PROGRAMS =
 
 if ENABLE_EXAMPLE_OPENSSL
-noinst_PROGRAMS += client server h09client h09server perfserver simpleclient
+noinst_PROGRAMS += client server h09client h09server
 
-simpleclient_CPPFLAGS = ${AM_CPPFLAGS} \
-	@JEMALLOC_CFLAGS@ @OPENSSL_CFLAGS@ -DWITH_EXAMPLE_OPENSSL
-simpleclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/openssl/libngtcp2_crypto_openssl.la \
-	@OPENSSL_LIBS@ \
-	@JEMALLOC_LIBS@
-simpleclient_SOURCES = simpleclient.c
-
-client_CPPFLAGS = ${AM_CPPFLAGS} \
-	@JEMALLOC_CFLAGS@ @OPENSSL_CFLAGS@ -DWITH_EXAMPLE_OPENSSL
+client_CPPFLAGS = ${AM_CPPFLAGS} @OPENSSL_CFLAGS@ -DWITH_EXAMPLE_OPENSSL
 client_LDADD = ${LDADD} \
 	$(top_builddir)/crypto/openssl/libngtcp2_crypto_openssl.la \
 	@OPENSSL_LIBS@ \
@@ -88,7 +74,7 @@ client_SOURCES = client.cc client.h ${CLIENT_SRCS} \
 server_CPPFLAGS = ${client_CPPFLAGS}
 server_LDADD = ${client_LDADD}
 server_SOURCES = server.cc server.h ${SERVER_SRCS} \
-	tls_server_context_openssl.cc tls_server_context_openssl.h \
+	tls_server_context_openssl.cc tls_server_context_openssl_h \
 	tls_server_session_openssl.cc tls_server_session_openssl.h \
 	tls_session_base_openssl.cc tls_session_base_openssl.h \
 	util_openssl.cc util_aead_openssl.cc
@@ -108,21 +94,12 @@ h09server_SOURCES = h09server.cc h09server.h ${SERVER_SRCS} \
 	tls_server_session_openssl.cc tls_server_session_openssl.h \
 	tls_session_base_openssl.cc tls_session_base_openssl.h \
 	util_openssl.cc util_aead_openssl.cc
-
-perfserver_CPPFLAGS = ${client_CPPFLAGS}
-perfserver_LDADD = ${client_LDADD}
-perfserver_SOURCES = perfserver.cc perfserver.h ${SERVER_SRCS} \
-	tls_server_context_openssl.cc tls_server_context_openssl.h \
-	tls_server_session_openssl.cc tls_server_session_openssl.h \
-	tls_session_base_openssl.cc tls_session_base_openssl.h \
-	util_openssl.cc util_aead_openssl.cc
 endif # ENABLE_EXAMPLE_OPENSSL
 
 if ENABLE_EXAMPLE_GNUTLS
 noinst_PROGRAMS += gtlsclient gtlsserver
 
-gtlsclient_CPPFLAGS = ${AM_CPPFLAGS} \
-	@JEMALLOC_CFLAGS@ @GNUTLS_CFLAGS@ -DWITH_EXAMPLE_GNUTLS
+gtlsclient_CPPFLAGS = ${AM_CPPFLAGS} @GNUTLS_CFLAGS@ -DWITH_EXAMPLE_GNUTLS
 gtlsclient_LDADD = ${LDADD} \
 	$(top_builddir)/crypto/gnutls/libngtcp2_crypto_gnutls.la \
 	@GNUTLS_LIBS@ \
@@ -160,7 +137,7 @@ bsslclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
 bsslserver_CPPFLAGS = ${bsslclient_CPPFLAGS}
 bsslserver_LDADD = ${bsslclient_LDADD}
 bsslserver_SOURCES = server.cc server.h ${SERVER_SRCS} \
-	tls_server_context_boringssl.cc tls_server_context_boringssl.h \
+	tls_server_context_boringssl.cc tls_server_context_boringssl_h \
 	tls_server_session_boringssl.cc tls_server_session_boringssl.h \
 	tls_session_base_openssl.cc tls_session_base_openssl.h \
 	util_openssl.cc util_aead_boringssl.cc
@@ -170,7 +147,6 @@ if HAVE_CUNIT
 check_PROGRAMS = examplestest
 examplestest_SOURCES = examplestest.cc \
 	util_test.cc util_test.h util.cc util.h
-examplestest_CPPFLAGS = ${AM_CPPFLAGS} @JEMALLOC_CFLAGS@
 examplestest_LDADD = ${LDADD} @CUNIT_LIBS@ @JEMALLOC_LIBS@
 
 TESTS = examplestest

@@ -100,32 +100,37 @@ struct Endpoint {
 
 class Handler : public HandlerBase {
 public:
-  Handler(struct ev_loop *loop, Server *server);
+  Handler(struct ev_loop *loop, Server *server, const ngtcp2_cid *rcid);
   ~Handler();
 
-  int init(const Endpoint &ep, const Address &local_addr, const sockaddr *sa,
-           socklen_t salen, const ngtcp2_cid *dcid, const ngtcp2_cid *scid,
+  int init(const Endpoint &ep, const sockaddr *sa, socklen_t salen,
+           const ngtcp2_cid *dcid, const ngtcp2_cid *scid,
            const ngtcp2_cid *ocid, const uint8_t *token, size_t tokenlen,
            uint32_t version, const TLSServerContext &tls_ctx);
 
-  int on_read(const Endpoint &ep, const Address &local_addr, const sockaddr *sa,
-              socklen_t salen, const ngtcp2_pkt_info *pi, uint8_t *data,
-              size_t datalen);
+  int on_read(const Endpoint &ep, const sockaddr *sa, socklen_t salen,
+              const ngtcp2_pkt_info *pi, uint8_t *data, size_t datalen);
   int on_write();
   int write_streams();
-  int feed_data(const Endpoint &ep, const Address &local_addr,
-                const sockaddr *sa, socklen_t salen, const ngtcp2_pkt_info *pi,
-                uint8_t *data, size_t datalen);
+  int feed_data(const Endpoint &ep, const sockaddr *sa, socklen_t salen,
+                const ngtcp2_pkt_info *pi, uint8_t *data, size_t datalen);
   void schedule_retransmit();
   int handle_expiry();
   void signal_write();
   int handshake_completed();
 
+  int recv_crypto_data(ngtcp2_crypto_level crypto_level, const uint8_t *data,
+                       size_t datalen);
+
   Server *server() const;
+  const Address &remote_addr() const;
   int recv_stream_data(uint32_t flags, int64_t stream_id, const uint8_t *data,
                        size_t datalen);
   int acked_stream_data_offset(int64_t stream_id, uint64_t offset,
                                uint64_t datalen);
+  const ngtcp2_cid *scid() const;
+  const ngtcp2_cid *pscid() const;
+  const ngtcp2_cid *rcid() const;
   uint32_t version() const;
   void on_stream_open(int64_t stream_id);
   int on_stream_close(int64_t stream_id, uint64_t app_error_code);
@@ -134,6 +139,8 @@ public:
   bool draining() const;
   int handle_error();
   int send_conn_close();
+  void update_endpoint(const ngtcp2_addr *addr);
+  void update_remote_addr(const ngtcp2_addr *addr, const ngtcp2_pkt_info *pi);
 
   int update_key(uint8_t *rx_secret, uint8_t *tx_secret,
                  ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
@@ -152,6 +159,10 @@ public:
   void add_sendq(Stream *stream);
 
 private:
+  Endpoint *endpoint_;
+  Address remote_addr_;
+  unsigned int ecn_;
+  size_t max_pktlen_;
   struct ev_loop *loop_;
   Server *server_;
   ev_io wev_;
@@ -159,6 +170,8 @@ private:
   ev_timer rttimer_;
   FILE *qlog_;
   ngtcp2_cid scid_;
+  ngtcp2_cid pscid_;
+  ngtcp2_cid rcid_;
   std::unordered_map<int64_t, std::unique_ptr<Stream>> streams_;
   std::set<Stream *, StreamIDLess> sendq_;
   // conn_closebuf_ contains a packet which contains CONNECTION_CLOSE.
@@ -183,32 +196,40 @@ public:
   int on_read(Endpoint &ep);
   int send_version_negotiation(uint32_t version, const uint8_t *dcid,
                                size_t dcidlen, const uint8_t *scid,
-                               size_t scidlen, Endpoint &ep,
-                               const Address &local_addr, const sockaddr *sa,
+                               size_t scidlen, Endpoint &ep, const sockaddr *sa,
                                socklen_t salen);
-  int send_retry(const ngtcp2_pkt_hd *chd, Endpoint &ep,
-                 const Address &local_addr, const sockaddr *sa,
+  int send_retry(const ngtcp2_pkt_hd *chd, Endpoint &ep, const sockaddr *sa,
                  socklen_t salen);
   int send_stateless_connection_close(const ngtcp2_pkt_hd *chd, Endpoint &ep,
-                                      const Address &local_addr,
                                       const sockaddr *sa, socklen_t salen);
+  int generate_retry_token(uint8_t *token, size_t &tokenlen, const sockaddr *sa,
+                           socklen_t salen, const ngtcp2_cid *scid,
+                           const ngtcp2_cid *ocid);
   int verify_retry_token(ngtcp2_cid *ocid, const ngtcp2_pkt_hd *hd,
                          const sockaddr *sa, socklen_t salen);
+  int generate_token(uint8_t *token, size_t &tokenlen, const sockaddr *sa);
   int verify_token(const ngtcp2_pkt_hd *hd, const sockaddr *sa,
                    socklen_t salen);
-  int send_packet(Endpoint &ep, const ngtcp2_addr &local_addr,
-                  const ngtcp2_addr &remote_addr, unsigned int ecn,
+  int send_packet(Endpoint &ep, const Address &remote_addr, unsigned int ecn,
                   const uint8_t *data, size_t datalen, size_t gso_size);
   void remove(const Handler *h);
 
+  int derive_token_key(uint8_t *key, size_t &keylen, uint8_t *iv, size_t &ivlen,
+                       const uint8_t *rand_data, size_t rand_datalen);
+  void generate_rand_data(uint8_t *buf, size_t len);
   void associate_cid(const ngtcp2_cid *cid, Handler *h);
   void dissociate_cid(const ngtcp2_cid *cid);
 
 private:
-  std::unordered_map<std::string, Handler *> handlers_;
+  std::unordered_map<std::string, std::unique_ptr<Handler>> handlers_;
+  // ctos_ is a mapping between client's initial destination
+  // connection ID, and server source connection ID.
+  std::unordered_map<std::string, std::string> ctos_;
   struct ev_loop *loop_;
   std::vector<Endpoint> endpoints_;
   const TLSServerContext &tls_ctx_;
+  ngtcp2_crypto_aead token_aead_;
+  ngtcp2_crypto_md token_md_;
   ev_signal sigintev_;
 };
 

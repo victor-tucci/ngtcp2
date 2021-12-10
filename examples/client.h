@@ -60,15 +60,6 @@ struct Stream {
   int fd;
 };
 
-class Client;
-
-struct Endpoint {
-  Address addr;
-  ev_io rev;
-  Client *client;
-  int fd;
-};
-
 class Client : public ClientBase {
 public:
   Client(struct ev_loop *loop);
@@ -81,18 +72,21 @@ public:
 
   void start_wev();
 
-  int on_read(const Endpoint &ep);
+  int on_read();
   int on_write();
   int write_streams();
-  int feed_data(const Endpoint &ep, const sockaddr *sa, socklen_t salen,
-                const ngtcp2_pkt_info *pi, uint8_t *data, size_t datalen);
+  int feed_data(const sockaddr *sa, socklen_t salen, const ngtcp2_pkt_info *pi,
+                uint8_t *data, size_t datalen);
   int handle_expiry();
   void schedule_retransmit();
   int handshake_completed();
   int handshake_confirmed();
 
-  int send_packet(const Endpoint &ep, const ngtcp2_addr &remote_addr,
-                  unsigned int ecn, const uint8_t *data, size_t datalen);
+  int recv_crypto_data(ngtcp2_crypto_level crypto_level, const uint8_t *data,
+                       size_t datalen);
+
+  void update_remote_addr(const ngtcp2_addr *addr, const ngtcp2_pkt_info *pi);
+  int send_packet();
   int on_stream_close(int64_t stream_id, uint64_t app_error_code);
   int on_extend_max_streams();
   int handle_error();
@@ -111,21 +105,17 @@ public:
   int select_preferred_address(Address &selected_addr,
                                const ngtcp2_preferred_addr *paddr);
 
-  std::optional<Endpoint *> endpoint_for(const Address &remote_addr);
-
-  void set_remote_addr(const ngtcp2_addr &remote_addr);
-
   int setup_httpconn();
   int submit_http_request(const Stream *stream);
   int recv_stream_data(uint32_t flags, int64_t stream_id, const uint8_t *data,
                        size_t datalen);
   int acked_stream_data_offset(int64_t stream_id, uint64_t datalen);
+  int http_acked_stream_data(int64_t stream_id, size_t datalen);
   void http_consume(int64_t stream_id, size_t nconsumed);
   void http_write_data(int64_t stream_id, const uint8_t *data, size_t datalen);
   int on_stream_reset(int64_t stream_id);
-  int on_stream_stop_sending(int64_t stream_id);
   int extend_max_stream_data(int64_t stream_id, uint64_t max_data);
-  int stop_sending(int64_t stream_id, uint64_t app_error_code);
+  int send_stop_sending(int64_t stream_id, uint64_t app_error_code);
   int http_stream_close(int64_t stream_id, uint64_t app_error_code);
 
   void reset_idle_timer();
@@ -133,9 +123,12 @@ public:
   void idle_timeout();
 
 private:
-  std::vector<Endpoint> endpoints_;
+  Address local_addr_;
   Address remote_addr_;
+  unsigned int ecn_;
+  size_t max_pktlen_;
   ev_io wev_;
+  ev_io rev_;
   ev_timer timer_;
   ev_timer rttimer_;
   ev_timer change_local_addr_timer_;
@@ -143,12 +136,15 @@ private:
   ev_timer delay_stream_timer_;
   ev_signal sigintev_;
   struct ev_loop *loop_;
+  int fd_;
   std::map<int64_t, std::unique_ptr<Stream>> streams_;
   nghttp3_conn *httpconn_;
   // addr_ is the server host address.
   const char *addr_;
   // port_ is the server port.
   const char *port_;
+  // common buffer used to store packet data before sending
+  Buffer sendbuf_;
   // nstreams_done_ is the number of streams opened.
   size_t nstreams_done_;
   // nstreams_closed_ is the number of streams get closed.

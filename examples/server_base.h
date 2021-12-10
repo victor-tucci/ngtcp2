@@ -60,7 +60,7 @@ struct Config {
   // mime_types_file is a path to "MIME media types and the
   // extensions" file.  Ubuntu mime-support package includes it in
   // /etc/mime/types.
-  std::string_view mime_types_file;
+  const char *mime_types_file;
   // mime_types maps file extension to MIME media type.
   std::unordered_map<std::string, std::string> mime_types;
   // port is the port number which server listens on for incoming
@@ -122,19 +122,16 @@ struct Config {
   // static_secret is used to derive keying materials for Retry and
   // Stateless Retry token.
   std::array<uint8_t, 32> static_secret;
-  // cc_algo is the congestion controller algorithm.
-  ngtcp2_cc_algo cc_algo;
+  // cc is the congestion controller algorithm.
+  std::string_view cc;
   // initial_rtt is an initial RTT.
   ngtcp2_duration initial_rtt;
   // max_udp_payload_size is the maximum UDP payload size that server
-  // transmits.
+  // transmits.  If it is 0, the default value is chosen.
   size_t max_udp_payload_size;
   // send_trailers controls whether server sends trailer fields or
   // not.
   bool send_trailers;
-  // max_gso_dgrams is the maximum number of UDP datagrams in one GSO
-  // sendmsg call.
-  size_t max_gso_dgrams;
 };
 
 struct Buffer {
@@ -158,6 +155,14 @@ struct Buffer {
   uint8_t *tail;
 };
 
+struct Crypto {
+  /* data is unacknowledged data. */
+  std::deque<Buffer> data;
+  /* acked_offset is the size of acknowledged crypto data removed from
+     |data| so far */
+  uint64_t acked_offset;
+};
+
 class HandlerBase {
 public:
   HandlerBase();
@@ -172,6 +177,8 @@ public:
 
   void write_server_handshake(ngtcp2_crypto_level crypto_level,
                               const uint8_t *data, size_t datalen);
+  void remove_tx_crypto_data(ngtcp2_crypto_level crypto_level, uint64_t offset,
+                             uint64_t datalen);
 
   void set_tls_alert(uint8_t alert);
 
@@ -179,6 +186,7 @@ public:
 
 protected:
   TLSServerSession tls_session_;
+  Crypto crypto_[3];
   ngtcp2_conn *conn_;
   QUICError last_error_;
   std::function<int()> application_tx_key_cb_;

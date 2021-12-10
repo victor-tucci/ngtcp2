@@ -44,12 +44,7 @@
 
 #include <array>
 
-#include <ngtcp2/ngtcp2.h>
-
 namespace ngtcp2 {
-
-constexpr size_t server_max_udp_payload_size = 1472;
-constexpr size_t client_max_udp_payload_size = 1362;
 
 enum network_error {
   NETWORK_ERR_OK = 0,
@@ -58,11 +53,6 @@ enum network_error {
   NETWORK_ERR_CLOSE_WAIT = -12,
   NETWORK_ERR_RETRY = -13,
   NETWORK_ERR_DROP_CONN = -14,
-};
-
-union in_addr_union {
-  in_addr in;
-  in6_addr in6;
 };
 
 union sockaddr_union {
@@ -75,7 +65,17 @@ union sockaddr_union {
 struct Address {
   socklen_t len;
   union sockaddr_union su;
-  uint32_t ifindex;
+};
+
+struct PathStorage {
+  PathStorage() {
+    path.local.addr = reinterpret_cast<sockaddr *>(&local_addrbuf);
+    path.remote.addr = reinterpret_cast<sockaddr *>(&remote_addrbuf);
+  }
+
+  ngtcp2_path path;
+  sockaddr_storage local_addrbuf;
+  sockaddr_storage remote_addrbuf;
 };
 
 } // namespace ngtcp2

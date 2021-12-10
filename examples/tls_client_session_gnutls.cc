@@ -175,7 +175,7 @@ int tp_recv_func(gnutls_session_t session, const uint8_t *data,
 
 namespace {
 int append_local_transport_params(const ClientBase *client,
-                                  gnutls_buffer_t extdata) {
+                                  gnutls_buffer_st *extdata) {
   auto conn = client->conn();
 
   ngtcp2_transport_params params;
@@ -199,36 +199,33 @@ int append_local_transport_params(const ClientBase *client,
     return -1;
   }
 
-  return 0;
+  return nwrite;
 }
 } // namespace
 
 namespace {
-int tp_send_func(gnutls_session_t session, gnutls_buffer_t extdata) {
+int tp_send_func(gnutls_session_t session, gnutls_buffer_st *extdata) {
   auto c = static_cast<ClientBase *>(gnutls_session_get_ptr(session));
-  if (append_local_transport_params(c, extdata) != 0) {
+  auto nwrite = append_local_transport_params(c, extdata);
+  if (nwrite < 0) {
     return -1;
   }
-  return 0;
+  return nwrite;
 }
 } // namespace
 
 int TLSClientSession::init(bool &early_data_enabled,
                            const TLSClientContext &tls_ctx,
                            const char *remote_addr, ClientBase *client,
-                           uint32_t quic_version, AppProtocol app_proto) {
+                           AppProtocol app_proto) {
   early_data_enabled = false;
 
-  if (auto rv =
-          gnutls_init(&session_, GNUTLS_CLIENT | GNUTLS_ENABLE_EARLY_DATA |
-                                     GNUTLS_NO_END_OF_EARLY_DATA);
-      rv != 0) {
+  if (auto rv = gnutls_init(&session_, GNUTLS_CLIENT); rv != 0) {
     std::cerr << "gnutls_init failed: " << gnutls_strerror(rv) << std::endl;
     return -1;
   }
 
-  std::string priority = "%DISABLE_TLS13_COMPAT_MODE:";
-  priority += config.ciphers;
+  std::string priority = config.ciphers;
   priority += ':';
   priority += config.groups;
 
@@ -247,10 +244,8 @@ int TLSClientSession::init(bool &early_data_enabled,
 
   if (auto rv = gnutls_session_ext_register(
           session_, "QUIC Transport Parameters",
-          (quic_version & 0xff000000)
-              ? NGTCP2_TLSEXT_QUIC_TRANSPORT_PARAMETERS_DRAFT
-              : NGTCP2_TLSEXT_QUIC_TRANSPORT_PARAMETERS_V1,
-          GNUTLS_EXT_TLS, tp_recv_func, tp_send_func, nullptr, nullptr, nullptr,
+          NGTCP2_TLSEXT_QUIC_TRANSPORT_PARAMETERS, GNUTLS_EXT_TLS, tp_recv_func,
+          tp_send_func, nullptr, nullptr, nullptr,
           GNUTLS_EXT_FLAG_TLS | GNUTLS_EXT_FLAG_CLIENT_HELLO |
               GNUTLS_EXT_FLAG_EE);
       rv != 0) {
@@ -268,10 +263,9 @@ int TLSClientSession::init(bool &early_data_enabled,
       f.seekg(0, std::ios::beg);
       f.read(content.data(), pos);
 
-      gnutls_datum_t s{
-          .data = reinterpret_cast<unsigned char *>(content.data()),
-          .size = static_cast<unsigned int>(content.size()),
-      };
+      gnutls_datum_t s{};
+      s.data = reinterpret_cast<unsigned char *>(content.data());
+      s.size = content.size();
 
       gnutls_datum_t d;
       if (auto rv =
@@ -305,13 +299,12 @@ int TLSClientSession::init(bool &early_data_enabled,
     return -1;
   }
 
-  // strip the first byte from H3_ALPN_V1
-  gnutls_datum_t alpn{
-      .data = const_cast<uint8_t *>(&H3_ALPN_V1[1]),
-      .size = H3_ALPN_V1[0],
-  };
+  gnutls_datum_t alpn = {NULL, 0};
 
-  gnutls_alpn_set_protocols(session_, &alpn, 1, GNUTLS_ALPN_MANDATORY);
+  // strip the first byte from H3_ALPN_DRAFT29
+  alpn.data = const_cast<uint8_t *>(&H3_ALPN_DRAFT29[1]);
+  alpn.size = H3_ALPN_DRAFT29[0];
+  gnutls_alpn_set_protocols(session_, &alpn, 1, 0);
 
   if (util::numeric_host(remote_addr)) {
     // If remote host is numeric address, just send "localhost" as SNI

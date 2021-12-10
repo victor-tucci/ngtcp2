@@ -157,8 +157,6 @@ static const char *strpkttype_long(uint8_t type) {
   switch (type) {
   case NGTCP2_PKT_VERSION_NEGOTIATION:
     return "VN";
-  case NGTCP2_PKT_STATELESS_RESET:
-    return "SR";
   case NGTCP2_PKT_INITIAL:
     return "Initial";
   case NGTCP2_PKT_RETRY:
@@ -203,13 +201,13 @@ static uint64_t timestamp_cast(uint64_t ns) { return ns / NGTCP2_MILLISECONDS; }
 
 static void log_fr_stream(ngtcp2_log *log, const ngtcp2_pkt_hd *hd,
                           const ngtcp2_stream *fr, const char *dir) {
-  log->log_printf(
-      log->user_data,
-      (NGTCP2_LOG_PKT " STREAM(0x%02x) id=0x%" PRIx64 " fin=%d offset=%" PRIu64
-                      " len=%" PRIu64 " uni=%d"),
-      NGTCP2_LOG_FRM_HD_FIELDS(dir), fr->type | fr->flags, fr->stream_id,
-      fr->fin, fr->offset, ngtcp2_vec_len(fr->data, fr->datacnt),
-      (fr->stream_id & 0x2) != 0);
+  log->log_printf(log->user_data,
+                  (NGTCP2_LOG_PKT " STREAM(0x%02x) id=0x%" PRIx64
+                                  " fin=%d offset=%" PRIu64 " len=%zu uni=%d"),
+                  NGTCP2_LOG_FRM_HD_FIELDS(dir), fr->type | fr->flags,
+                  fr->stream_id, fr->fin, fr->offset,
+                  ngtcp2_vec_len(fr->data, fr->datacnt),
+                  (fr->stream_id & 0x2) != 0);
 }
 
 static void log_fr_ack(ngtcp2_log *log, const ngtcp2_pkt_hd *hd,
@@ -448,8 +446,7 @@ static void log_fr_handshake_done(ngtcp2_log *log, const ngtcp2_pkt_hd *hd,
 
 static void log_fr_datagram(ngtcp2_log *log, const ngtcp2_pkt_hd *hd,
                             const ngtcp2_datagram *fr, const char *dir) {
-  log->log_printf(log->user_data,
-                  (NGTCP2_LOG_PKT " DATAGRAM(0x%02x) len=%" PRIu64),
+  log->log_printf(log->user_data, (NGTCP2_LOG_PKT " DATAGRAM(0x%02x) len=%zu"),
                   NGTCP2_LOG_FRM_HD_FIELDS(dir), fr->type,
                   ngtcp2_vec_len(fr->data, fr->datacnt));
 }
@@ -572,9 +569,6 @@ void ngtcp2_log_rx_sr(ngtcp2_log *log, const ngtcp2_pkt_stateless_reset *sr) {
   }
 
   memset(&shd, 0, sizeof(shd));
-
-  shd.flags = NGTCP2_PKT_FLAG_LONG_FORM;
-  shd.type = NGTCP2_PKT_STATELESS_RESET;
 
   log->log_printf(
       log->user_data, (NGTCP2_LOG_PKT " token=0x%s randlen=%zu"),
@@ -700,8 +694,6 @@ void ngtcp2_log_remote_tp(ngtcp2_log *log, uint8_t exttype,
   log->log_printf(log->user_data,
                   (NGTCP2_LOG_TP " max_datagram_frame_size=%" PRIu64),
                   NGTCP2_LOG_TP_HD_FIELDS, params->max_datagram_frame_size);
-  log->log_printf(log->user_data, (NGTCP2_LOG_TP " grease_quic_bit=%d"),
-                  NGTCP2_LOG_TP_HD_FIELDS, params->grease_quic_bit);
 }
 
 void ngtcp2_log_pkt_lost(ngtcp2_log *log, int64_t pkt_num, uint8_t type,

@@ -52,7 +52,7 @@ void test_ngtcp2_encode_transport_params(void) {
   memset(&nparams, 0, sizeof(nparams));
 
   /* CH, required parameters only */
-  params.max_udp_payload_size = NGTCP2_DEFAULT_MAX_RECV_UDP_PAYLOAD_SIZE;
+  params.max_udp_payload_size = NGTCP2_DEFAULT_MAX_UDP_PAYLOAD_SIZE;
   params.ack_delay_exponent = NGTCP2_DEFAULT_ACK_DELAY_EXPONENT;
   params.max_ack_delay = NGTCP2_DEFAULT_MAX_ACK_DELAY;
   params.initial_scid = scid;
@@ -95,7 +95,7 @@ void test_ngtcp2_encode_transport_params(void) {
   memset(&nparams, 0, sizeof(nparams));
 
   /* EE, required parameters only */
-  params.max_udp_payload_size = NGTCP2_DEFAULT_MAX_RECV_UDP_PAYLOAD_SIZE;
+  params.max_udp_payload_size = NGTCP2_DEFAULT_MAX_UDP_PAYLOAD_SIZE;
   params.ack_delay_exponent = NGTCP2_DEFAULT_ACK_DELAY_EXPONENT;
   params.max_ack_delay = NGTCP2_DEFAULT_MAX_ACK_DELAY;
   params.original_dcid = dcid;
@@ -161,7 +161,6 @@ void test_ngtcp2_encode_transport_params(void) {
   params.initial_scid = scid;
   params.active_connection_id_limit = 1000000007;
   params.max_datagram_frame_size = 65535;
-  params.grease_quic_bit = 1;
 
   for (i = 0;
        i <
@@ -197,9 +196,7 @@ void test_ngtcp2_encode_transport_params(void) {
             ngtcp2_put_varint_len(params.initial_scid.datalen) +
             params.initial_scid.datalen) +
            varint_paramlen(NGTCP2_TRANSPORT_PARAM_MAX_DATAGRAM_FRAME_SIZE,
-                           params.max_datagram_frame_size) +
-           (ngtcp2_put_varint_len(NGTCP2_TRANSPORT_PARAM_GREASE_QUIC_BIT) +
-            ngtcp2_put_varint_len(0));
+                           params.max_datagram_frame_size);
        ++i) {
     nwrite = ngtcp2_encode_transport_params(
         buf, i, NGTCP2_TRANSPORT_PARAMS_TYPE_CLIENT_HELLO, &params);
@@ -233,7 +230,6 @@ void test_ngtcp2_encode_transport_params(void) {
   CU_ASSERT(params.active_connection_id_limit ==
             nparams.active_connection_id_limit);
   CU_ASSERT(params.max_datagram_frame_size == nparams.max_datagram_frame_size);
-  CU_ASSERT(params.grease_quic_bit == nparams.grease_quic_bit);
 
   memset(&params, 0, sizeof(params));
   memset(&nparams, 0, sizeof(nparams));
@@ -255,11 +251,9 @@ void test_ngtcp2_encode_transport_params(void) {
   memset(params.preferred_address.ipv4_addr, 0,
          sizeof(params.preferred_address.ipv4_addr));
   params.preferred_address.ipv4_port = 0;
-  params.preferred_address.ipv4_present = 0;
   memset(params.preferred_address.ipv6_addr, 0xe1,
          sizeof(params.preferred_address.ipv6_addr));
   params.preferred_address.ipv6_port = 63111;
-  params.preferred_address.ipv6_present = 1;
   scid_init(&params.preferred_address.cid);
   memset(params.preferred_address.stateless_reset_token, 0xd1,
          sizeof(params.preferred_address.stateless_reset_token));
@@ -271,7 +265,6 @@ void test_ngtcp2_encode_transport_params(void) {
   params.initial_scid = scid;
   params.active_connection_id_limit = 1073741824;
   params.max_datagram_frame_size = 63;
-  params.grease_quic_bit = 1;
 
   for (i = 0;
        i <
@@ -325,9 +318,7 @@ void test_ngtcp2_encode_transport_params(void) {
             ngtcp2_put_varint_len(params.initial_scid.datalen) +
             params.initial_scid.datalen) +
            varint_paramlen(NGTCP2_TRANSPORT_PARAM_MAX_DATAGRAM_FRAME_SIZE,
-                           params.max_datagram_frame_size) +
-           (ngtcp2_put_varint_len(NGTCP2_TRANSPORT_PARAM_GREASE_QUIC_BIT) +
-            ngtcp2_put_varint_len(0));
+                           params.max_datagram_frame_size);
        ++i) {
     nwrite = ngtcp2_encode_transport_params(
         buf, i, NGTCP2_TRANSPORT_PARAMS_TYPE_ENCRYPTED_EXTENSIONS, &params);
@@ -367,15 +358,11 @@ void test_ngtcp2_encode_transport_params(void) {
                         sizeof(params.preferred_address.ipv4_addr)));
   CU_ASSERT(params.preferred_address.ipv4_port ==
             nparams.preferred_address.ipv4_port);
-  CU_ASSERT(params.preferred_address.ipv4_present ==
-            nparams.preferred_address.ipv4_present);
   CU_ASSERT(0 == memcmp(params.preferred_address.ipv6_addr,
                         nparams.preferred_address.ipv6_addr,
                         sizeof(params.preferred_address.ipv6_addr)));
   CU_ASSERT(params.preferred_address.ipv6_port ==
             nparams.preferred_address.ipv6_port);
-  CU_ASSERT(params.preferred_address.ipv6_present ==
-            nparams.preferred_address.ipv6_present);
   CU_ASSERT(ngtcp2_cid_eq(&params.preferred_address.cid,
                           &nparams.preferred_address.cid));
   CU_ASSERT(0 ==
@@ -392,5 +379,4 @@ void test_ngtcp2_encode_transport_params(void) {
   CU_ASSERT(params.active_connection_id_limit ==
             nparams.active_connection_id_limit);
   CU_ASSERT(params.max_datagram_frame_size == nparams.max_datagram_frame_size);
-  CU_ASSERT(params.grease_quic_bit = nparams.grease_quic_bit);
 }

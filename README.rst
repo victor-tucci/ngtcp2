@@ -3,28 +3,37 @@ ngtcp2
 
 "Call it TCP/2.  One More Time."
 
-ngtcp2 project is an effort to implement `RFC9000
-<https://datatracker.ietf.org/doc/html/rfc9000>`_ QUIC protocol.
+ngtcp2 project is an effort to implement QUIC protocol which is now
+being discussed in IETF QUICWG for its standardization.
+
+Branching strategy
+------------------
+
+As of the beginning of draft-23 development, the new branching
+strategy has been introduced.  The master branch tracks the latest
+QUIC draft development.  When new draft-*NN* is published, the new
+branch named draft-*NN-1* is created based on the master branch.
+Those draft-*NN* branches are considered as "archived", which means
+that no update is expected.  PR should be made to the master branch
+only.
+
+For older draft implementations:
+
+- `draft-32 <https://github.com/ngtcp2/ngtcp2/tree/draft-32>`_
+- `draft-31 <https://github.com/ngtcp2/ngtcp2/tree/draft-31>`_
+- `draft-30 <https://github.com/ngtcp2/ngtcp2/tree/draft-30>`_
+- `draft-29 <https://github.com/ngtcp2/ngtcp2/tree/draft-29>`_
+- `draft-28 <https://github.com/ngtcp2/ngtcp2/tree/draft-28>`_
+- `draft-27 <https://github.com/ngtcp2/ngtcp2/tree/draft-27>`_
+- `draft-25 <https://github.com/ngtcp2/ngtcp2/tree/draft-25>`_
+- `draft-24 <https://github.com/ngtcp2/ngtcp2/tree/draft-24>`_
+- `draft-23 <https://github.com/ngtcp2/ngtcp2/tree/draft-23>`_
+- `draft-22 <https://github.com/ngtcp2/ngtcp2/tree/draft-22>`_
 
 Documentation
 -------------
 
 `Online documentation <https://nghttp2.org/ngtcp2/>`_ is available.
-
-Public test server
-------------------
-
-The following endpoints are available to try out ngtcp2
-implementation:
-
-- https://nghttp2.org:4433
-- https://nghttp2.org:4434 (requires address validation token)
-- https://nghttp2.org (powered by `nghttpx
-  <https://nghttp2.org/documentation/nghttpx.1.html>`_)
-
-  This endpoints sends Alt-Svc header field to clients if it is
-  accessed via HTTP/1.1 or HTTP/2 to tell them that HTTP/3 is
-  available at UDP 443.
 
 Requirements
 ------------
@@ -36,36 +45,40 @@ gcc >= 8.0).
 
 The following packages are required to configure the build system:
 
-- pkg-config >= 0.20
-- autoconf
-- automake
-- autotools-dev
-- libtool
+* pkg-config >= 0.20
+* autoconf
+* automake
+* autotools-dev
+* libtool
 
 libngtcp2 uses cunit for its unit test frame work:
 
-- cunit >= 2.1
+* cunit >= 2.1
 
 To build sources under the examples directory, libev and nghttp3 are
 required:
 
-- libev
-- `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ for HTTP/3
+* libev
+* nghttp3 (https://github.com/ngtcp2/nghttp3) for HTTP/3
 
-ngtcp2 crypto helper library, and client and server under examples
-directory require at least one of the following TLS backends:
+The client and server under examples directory require patched OpenSSL
+as crypto backend:
 
-- `OpenSSL with QUIC support
-  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1l+quic>`_
-- GnuTLS >= 3.7.2
-- BoringSSL (commit f6ef1c560ae5af51e2df5d8d2175bed207b28b8f)
+* Patched OpenSSL
+  (https://github.com/tatsuhiro-t/openssl/tree/OpenSSL_1_1_1g-quic-draft-33)
+
+For crypto helper library:
+
+* Patched OpenSSL listed above
+* libgnutls28-dev >= 3.7.0
+* BoringSSL (commit 78f15a6aa9f11ab7cff736f920c4858cc38264fb)
 
 Build from git
 --------------
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b OpenSSL_1_1_1l+quic https://github.com/quictls/openssl
+   $ git clone --depth 1 -b OpenSSL_1_1_1g-quic-draft-33 https://github.com/tatsuhiro-t/openssl
    $ cd openssl
    $ # For Linux
    $ ./config enable-tls1_3 --prefix=$PWD/build
@@ -85,8 +98,6 @@ Build from git
    $ # For Mac users who have installed libev with MacPorts, append
    $ # ',-L/opt/local/lib' to LDFLAGS, and also pass
    $ # CPPFLAGS="-I/opt/local/include" to ./configure.
-   $ # For OpenSSL v3.0.0, replace "openssl/build/lib" with
-   $ # "openssl/build/lib64".
    $ ./configure PKG_CONFIG_PATH=$PWD/../openssl/build/lib/pkgconfig:$PWD/../nghttp3/build/lib/pkgconfig LDFLAGS="-Wl,-rpath,$PWD/../openssl/build/lib"
    $ make -j$(nproc) check
 
@@ -147,8 +158,8 @@ packet pretty small because it does not send its certificates.
 To send 0-RTT data, after making sure that resumption works, use -d
 option to specify a file which contains data to send.
 
-Token (Not something included in Retry packet)
-----------------------------------------------
+Token (Not  comes in Retry packet)
+----------------------------------
 
 QUIC server might send a token to client after connection has been
 established.  Client can send this token in subsequent connection to
@@ -169,12 +180,16 @@ The header file exists under crypto/includes/ngtcp2 directory.
 Each library file is built for a particular TLS backend.  The
 available crypto helper libraries are:
 
-- libngtcp2_crypto_openssl: Use OpenSSL as TLS backend
-- libngtcp2_crypto_gnutls: Use GnuTLS as TLS backend
-- libngtcp2_crypto_boringssl: Use BoringSSL as TLS backend
+* libngtcp2_crypto_openssl: Use OpenSSL as TLS backend
+* libngtcp2_crypto_gnutls: Use GnuTLS as TLS backend
+* libngtcp2_crypto_boringssl: Use BoringSSL as TLS backend
 
 Because BoringSSL is an unversioned product, we only tested its
 particular revision.  See Requirements section above.
+
+Note that GnuTLS has some issues regarding early data. GnuTLS client
+cannot send early data and GnuTLS server will crash when it receives
+0RTT packet.
 
 The examples directory contains client and server that are linked to
 those crypto helper libraries and TLS backends.  They are only built
@@ -186,16 +201,6 @@ if their corresponding crypto helper library is built:
 - gtlsserver: GnuTLS server
 - bsslclient: BoringSSL client
 - bsslserver: BoringSSL server
-
-QUIC protocol extensions
--------------------------
-
-The library implements the following QUIC protocol extensions:
-
-- `An Unreliable Datagram Extension to QUIC
-  <https://quicwg.org/datagram/draft-ietf-quic-datagram.html>`_
-- `Greasing the QUIC Bit
-  <https://datatracker.ietf.org/doc/html/draft-ietf-quic-bit-grease>`_
 
 Configuring Wireshark for QUIC
 ------------------------------

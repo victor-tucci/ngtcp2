@@ -79,17 +79,8 @@ void test_ngtcp2_conn_set_remote_transport_params(void);
 void test_ngtcp2_conn_write_connection_close(void);
 void test_ngtcp2_conn_write_application_close(void);
 void test_ngtcp2_conn_rtb_reclaim_on_pto(void);
-void test_ngtcp2_conn_rtb_reclaim_on_pto_datagram(void);
 void test_ngtcp2_conn_validate_ecn(void);
 void test_ngtcp2_conn_path_validation(void);
-void test_ngtcp2_conn_early_data_sync_stream_data_limit(void);
-void test_ngtcp2_conn_early_data_rejected(void);
-void test_ngtcp2_conn_keep_alive(void);
-void test_ngtcp2_conn_retire_stale_bound_dcid(void);
-void test_ngtcp2_conn_get_scid(void);
-void test_ngtcp2_conn_stream_close(void);
-void test_ngtcp2_conn_buffer_pkt(void);
-void test_ngtcp2_accept(void);
 void test_ngtcp2_pkt_write_connection_close(void);
 
 #endif /* NGTCP2_CONN_TEST_H */

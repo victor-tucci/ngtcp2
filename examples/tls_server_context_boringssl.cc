@@ -72,10 +72,6 @@ int alpn_select_proto_h3_cb(SSL *ssl, const unsigned char **out,
     alpn = reinterpret_cast<const uint8_t *>(H3_ALPN_DRAFT32);
     alpnlen = str_size(H3_ALPN_DRAFT32);
     break;
-  case QUIC_VER_V1:
-    alpn = reinterpret_cast<const uint8_t *>(H3_ALPN_V1);
-    alpnlen = str_size(H3_ALPN_V1);
-    break;
   default:
     if (!config.quiet) {
       std::cerr << "Unexpected quic protocol version: " << std::hex << "0x"
@@ -126,10 +122,6 @@ int alpn_select_proto_hq_cb(SSL *ssl, const unsigned char **out,
     alpn = reinterpret_cast<const uint8_t *>(HQ_ALPN_DRAFT32);
     alpnlen = str_size(HQ_ALPN_DRAFT32);
     break;
-  case QUIC_VER_V1:
-    alpn = reinterpret_cast<const uint8_t *>(HQ_ALPN_V1);
-    alpnlen = str_size(HQ_ALPN_V1);
-    break;
   default:
     if (!config.quiet) {
       std::cerr << "Unexpected quic protocol version: " << std::hex << "0x"
@@ -137,29 +129,6 @@ int alpn_select_proto_hq_cb(SSL *ssl, const unsigned char **out,
     }
     return SSL_TLSEXT_ERR_ALERT_FATAL;
   }
-
-  for (auto p = in, end = in + inlen; p + alpnlen <= end; p += *p + 1) {
-    if (std::equal(alpn, alpn + alpnlen, p)) {
-      *out = p + 1;
-      *outlen = *p;
-      return SSL_TLSEXT_ERR_OK;
-    }
-  }
-
-  if (!config.quiet) {
-    std::cerr << "Client did not present ALPN " << &alpn[1] << std::endl;
-  }
-
-  return SSL_TLSEXT_ERR_ALERT_FATAL;
-}
-} // namespace
-
-namespace {
-int alpn_select_proto_perf_cb(SSL *ssl, const unsigned char **out,
-                              unsigned char *outlen, const unsigned char *in,
-                              unsigned int inlen, void *arg) {
-  constexpr static uint8_t alpn[] = "\x4perf";
-  size_t alpnlen = str_size(alpn);
 
   for (auto p = in, end = in + inlen; p + alpnlen <= end; p += *p + 1) {
     if (std::equal(alpn, alpn + alpnlen, p)) {
@@ -278,9 +247,6 @@ int TLSServerContext::init(const char *private_key_file, const char *cert_file,
   case AppProtocol::HQ:
     SSL_CTX_set_alpn_select_cb(ssl_ctx_, alpn_select_proto_hq_cb, nullptr);
     break;
-  case AppProtocol::Perf:
-    SSL_CTX_set_alpn_select_cb(ssl_ctx_, alpn_select_proto_perf_cb, nullptr);
-    break;
   }
 
   SSL_CTX_set_default_verify_paths(ssl_ctx_);
@@ -293,7 +259,7 @@ int TLSServerContext::init(const char *private_key_file, const char *cert_file,
   }
 
   if (SSL_CTX_use_certificate_chain_file(ssl_ctx_, cert_file) != 1) {
-    std::cerr << "SSL_CTX_use_certificate_chain_file: "
+    std::cerr << "SSL_CTX_use_certificate_file: "
               << ERR_error_string(ERR_get_error(), nullptr) << std::endl;
     return -1;
   }

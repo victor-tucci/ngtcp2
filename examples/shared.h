@@ -29,28 +29,23 @@
 #  include <config.h>
 #endif // HAVE_CONFIG_H
 
-#include <optional>
-
 #include <ngtcp2/ngtcp2.h>
-
-#include "network.h"
 
 namespace ngtcp2 {
 
 enum class AppProtocol {
   H3,
   HQ,
-  Perf,
 };
 
-constexpr uint8_t HQ_ALPN[] = "\xahq-interop\x5hq-29\x5hq-30\x5hq-31\x5hq-32";
+constexpr uint8_t HQ_ALPN[] = "\x5hq-29\x5hq-30\x5hq-31\x5hq-32\x2hq";
 constexpr uint8_t HQ_ALPN_DRAFT29[] = "\x5hq-29";
 constexpr uint8_t HQ_ALPN_DRAFT30[] = "\x5hq-30";
 constexpr uint8_t HQ_ALPN_DRAFT31[] = "\x5hq-31";
 constexpr uint8_t HQ_ALPN_DRAFT32[] = "\x5hq-32";
-constexpr uint8_t HQ_ALPN_V1[] = "\xahq-interop";
+constexpr uint8_t HQ_ALPN_V1[] = "\x2hq";
 
-constexpr uint8_t H3_ALPN[] = "\x2h3\x5h3-29\x5h3-30\x5h3-31\x5h3-32";
+constexpr uint8_t H3_ALPN[] = "\x5h3-29\x5h3-30\x5h3-31\x5h3-32\x2h3";
 constexpr uint8_t H3_ALPN_DRAFT29[] = "\x5h3-29";
 constexpr uint8_t H3_ALPN_DRAFT30[] = "\x5h3-30";
 constexpr uint8_t H3_ALPN_DRAFT31[] = "\x5h3-31";
@@ -96,17 +91,6 @@ void fd_set_ecn(int fd, int family, unsigned int ecn);
 // fd_set_recv_ecn sets socket option to |fd| so that it can receive
 // ECN bits.
 void fd_set_recv_ecn(int fd, int family);
-
-std::optional<Address> msghdr_get_local_addr(msghdr *msg, int family);
-
-void set_port(Address &dst, Address &src);
-
-// get_local_addr stores preferred local address (interface address)
-// in |iau| for a given destination address |remote_addr|.
-int get_local_addr(in_addr_union &iau, const Address &remote_addr);
-
-// addreq returns true if |sa| and |iau| contain the same address.
-bool addreq(const sockaddr *sa, const in_addr_union &iau);
 
 } // namespace ngtcp2
 

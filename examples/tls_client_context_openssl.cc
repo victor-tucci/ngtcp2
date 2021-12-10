@@ -26,7 +26,6 @@
 
 #include <iostream>
 #include <fstream>
-#include <limits>
 
 #include <ngtcp2/ngtcp2_crypto_openssl.h>
 
@@ -153,7 +152,7 @@ int TLSClientContext::init(const char *private_key_file,
     }
 
     if (SSL_CTX_use_certificate_chain_file(ssl_ctx_, cert_file) != 1) {
-      std::cerr << "SSL_CTX_use_certificate_chain_file: "
+      std::cerr << "SSL_CTX_use_certificate_file: "
                 << ERR_error_string(ERR_get_error(), nullptr) << std::endl;
       return -1;
     }

@@ -7,11 +7,9 @@ describes a brief introduction of programming ngtcp2.
 Prerequisites
 -------------
 
-Reading `QUIC transport
-<https://datatracker.ietf.org/doc/html/rfc9000>`_ and `QUIC TLS
-<https://datatracker.ietf.org/doc/html/rfc9001>`_ documents helps you
-a lot to write QUIC application.  They describes how TLS is integrated
-into QUIC and why the existing TLS stack cannot be used with QUIC.
+Reading QUIC transport and TLS draft helps you a lot to write QUIC
+application.  They describes how TLS is integrated into QUIC and why
+the existing TLS stack cannot be used with QUIC.
 
 QUIC requires the special interface from TLS stack, which is probably
 not available from most of the existing TLS stacks.  As far as I know,
@@ -21,9 +19,9 @@ to build QUIC application you have to choose one of them.  Here is the
 list of TLS stacks which are supposed to provide such interface and
 for which we provide crypto helper libraries:
 
-* `OpenSSL with QUIC support
-  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1l+quic>`_
-* GnuTLS >= 3.7.2
+* `my OpenSSL fork
+  <https://github.com/tatsuhiro-t/openssl/tree/OpenSSL_1_1_1g-quic-draft-33>`_
+* GnuTLS >= 3.7.0
 * BoringSSL
 
 Creating ngtcp2_conn object
@@ -44,8 +42,7 @@ callback functions must be set:
 
 * :member:`client_initial <ngtcp2_callbacks.client_initial>`:
   `ngtcp2_crypto_client_initial_cb()` can be passed directly.
-* :member:`recv_crypto_data <ngtcp2_callbacks.recv_crypto_data>`:
-  `ngtcp2_crypto_recv_crypto_data_cb()` can be passed directly.
+* :member:`recv_crypto_data <ngtcp2_callbacks.recv_crypto_data>`
 * :member:`encrypt <ngtcp2_callbacks.encrypt>`:
   `ngtcp2_crypto_encrypt_cb()` can be passed directly.
 * :member:`decrypt <ngtcp2_callbacks.decrypt>`:
@@ -66,16 +63,13 @@ callback functions must be set:
   <ngtcp2_callbacks.delete_crypto_cipher_ctx>`:
   `ngtcp2_crypto_delete_crypto_cipher_ctx_cb()` can be passed
   directly.
-* :member:`get_path_challenge_data <ngtcp2_get_path_challenge_data>`:
-  `ngtcp2_crypto_get_path_challenge_data_cb()` can be passed directly.
 
 For server application, the following callback functions must be set:
 
 * :member:`recv_client_initial
   <ngtcp2_callbacks.recv_client_initial>`:
   `ngtcp2_crypto_recv_client_initial_cb()` can be passed directly.
-* :member:`recv_crypto_data <ngtcp2_callbacks.recv_crypto_data>`:
-  `ngtcp2_crypto_recv_crypto_data_cb()` can be passed directly.
+* :member:`recv_crypto_data <ngtcp2_callbacks.recv_crypto_data>`
 * :member:`encrypt <ngtcp2_callbacks.encrypt>`:
   `ngtcp2_crypto_encrypt_cb()` can be passed directly.
 * :member:`decrypt <ngtcp2_callbacks.decrypt>`:
@@ -94,8 +88,6 @@ For server application, the following callback functions must be set:
   <ngtcp2_callbacks.delete_crypto_cipher_ctx>`:
   `ngtcp2_crypto_delete_crypto_cipher_ctx_cb()` can be passed
   directly.
-* :member:`get_path_challenge_data <ngtcp2_get_path_challenge_data>`:
-  `ngtcp2_crypto_get_path_challenge_data_cb()` can be passed directly.
 
 ``ngtcp2_crypto_*`` functions are a part of :doc:`ngtcp2 crypto API
 <crypto_apiref>` which provides easy integration with the supported
@@ -123,14 +115,15 @@ Client application has to supply Connection IDs to
 connection ID (DCID), and which should be random byte string and at
 least 8 bytes long.  The *scid* is the source connection ID (SCID)
 which identifies the client itself.  The *version* parameter is the
-QUIC version to use.  It should be :macro:`NGTCP2_PROTO_VER_V1`.
+QUIC version to use.  It should be :macro:`NGTCP2_PROTO_VER_MIN` for
+the maximum compatibility.
 
 Similarly, server application has to supply these parameters to
 `ngtcp2_conn_server_new()`.  But the *dcid* must be the same value
 which is received from client (which is client SCID).  The *scid* is
 chosen by server.  Don't use DCID in client packet as server SCID.
 The *version* parameter is the QUIC version to use.  It should be
-:macro:`NGTCP2_PROTO_VER_V1`.
+:macro:`NGTCP2_PROTO_VER_MIN` for the maximum compatibility.
 
 A path is very important to QUIC connection.  It is the pair of
 endpoints, local and remote.  The path passed to
@@ -182,72 +175,31 @@ stream.  For unidirectional stream, call
 `ngtcp2_conn_open_uni_stream()`.  Call `ngtcp2_conn_writev_stream()`
 to send stream data.
 
-If BBR congestion control algorithm is used, the additional API
-functions are required when sending QUIC packets.  BBR needs pacing
-packets.  `ngtcp2_conn_get_send_quantum()` returns the number of bytes
-that can be sent without packet spacing.  After one or more calls of
-`ngtcp2_conn_writev_stream()` (it can be called multiple times to fill
-the buffer sized up to `ngtcp2_conn_get_send_quantum()` bytes), call
-`ngtcp2_conn_update_pkt_tx_time()` to set the timer when the next
-packet should be sent.  The timer is integrated into
-`ngtcp2_conn_get_expiry()`.
-
-Packet handling on server side
-------------------------------
-
-Any incoming UDP datagram should be first processed by
-`ngtcp2_pkt_decode_version_cid()`.  It can handle Connection ID more
-than 20 bytes which is the maximum length defined in QUIC v1.  If the
-function returns :macro:`NGTCP2_ERR_VERSION_NEGOTIATION`, server
-should send Version Negotiation packet.  Use
-`ngtcp2_pkt_write_version_negotiation()` for this purpose.  If
-`ngtcp2_pkt_decode_version_cid()` succeeds, then check whether the UDP
-datagram belongs to any existing connection by looking up connection
-tables by Destination Connection ID.  If it belongs to an existing
-connection, pass the UDP datagram to `ngtcp2_conn_read_pkt()`.  If it
-does not belong to any existing connection, it should be passed to
-`ngtcp2_accept()`.  If it returns :macro:`NGTCP2_ERR_RETRY`, the
-server should send Retry packet (use `ngtcp2_crypto_write_retry()` to
-create Retry packet).  If it returns
-:macro:`NGTCP2_ERR_VERSION_NEGOTIATION`, the server should send
-Version Negotiation packet.  If it returns an other negative error
-code, just drop the packet to the floor and take no action, or send
-Stateless Reset packet (use `ngtcp2_pkt_write_stateless_reset()` to
-create Stateless Reset packet).  Otherwise, the UDP datagram is
-acceptable as a new connection.  Create :type:`ngtcp2_conn` object and
-pass the UDP datagram to `ngtcp2_conn_read_pkt()`.
-
-Dealing with early data
------------------------
+Dealing with 0RTT data
+----------------------
 
 Client application has to load resumed TLS session.  It also has to
-set the remembered transport parameters using
+set the remembered transport parameter using
 `ngtcp2_conn_set_early_remote_transport_params()` function.
 
-Other than that, there is no difference between early data and 1RTT
-data in terms of API usage.
+Other than that, there is no difference between 0RTT and 1RTT data in
+terms of API usage.
 
-If early data is rejected by a server, client must call
-`ngtcp2_conn_early_data_rejected`.  All connection states altered
-during early data transmission are undone.  The library does not
-retransmit early data to server as 1RTT data.  If an application
-wishes to resend data, it has to reopen streams and writes data again.
-See `ngtcp2_conn_early_data_rejected`.
+Stream and crypto data ownershp
+-------------------------------
 
-Stream data ownership
---------------------------------
-
-Stream data passed to :type:`ngtcp2_conn` must be held by application
-until :member:`ngtcp2_callbacks.acked_stream_data_offset` callbacks is
-invoked, telling that the those data are acknowledged by the remote
-endpoint and no longer used by the library.
+Stream and crypto data passed to :type:`ngtcp2_conn` must be held by
+application until :member:`ngtcp2_callbacks.acked_stream_data_offset`
+and :member:`ngtcp2_callbacks.acked_crypto_offset` callbacks,
+respectively, telling that the those data are acknowledged by the
+remote endpoint and no longer used by the library.
 
 Timers
 ------
 
-The library does not ask an operating system any timestamp.  Instead,
-an application has to supply timestamp to the library.  The type of
-timestamp in ngtcp2 library is :type:`ngtcp2_tstamp` which is
+The library does not ask any timestamp to an operating system.
+Instead, an application has to supply timestamp to the library.  The
+type of timestamp in ngtcp2 library is :type:`ngtcp2_tstamp` which is
 nanosecond resolution.  The library only cares the difference of
 timestamp, so it does not have to be a system clock.  A monotonic
 clock should work better.  It should be same clock passed to
@@ -264,15 +216,6 @@ Application also handles connection idle timeout.
 `ngtcp2_conn_get_idle_expiry()` returns the current idle expiry.  If
 idle timer is expired, the connection should be closed without calling
 `ngtcp2_conn_write_connection_close()`.
-
-Connection migration
---------------------
-
-In QUIC, client application can migrate to a new local address.
-`ngtcp2_conn_initiate_immediate_migration()` migrates to a new local
-address without checking reachability.  On the other hand,
-`ngtcp2_conn_initiate_migration()` migrates to a new local address
-after a new path is validated (thus reachability is established).
 
 Closing connection
 ------------------

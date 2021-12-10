@@ -33,7 +33,6 @@
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/evp.h>
-#include <openssl/rand.h>
 
 #include "template.h"
 
@@ -41,13 +40,9 @@ namespace ngtcp2 {
 
 namespace util {
 
-int generate_secure_random(uint8_t *data, size_t datalen) {
-  if (RAND_bytes(data, static_cast<int>(datalen)) != 1) {
-    return -1;
-  }
-
-  return 0;
-}
+namespace {
+auto randgen = make_mt19937();
+} // namespace
 
 int generate_secret(uint8_t *secret, size_t secretlen) {
   std::array<uint8_t, 16> rand;
@@ -55,9 +50,8 @@ int generate_secret(uint8_t *secret, size_t secretlen) {
 
   assert(md.size() == secretlen);
 
-  if (generate_secure_random(rand.data(), rand.size()) != 0) {
-    return -1;
-  }
+  auto dis = std::uniform_int_distribution<uint8_t>(0, 255);
+  std::generate_n(rand.data(), rand.size(), [&dis]() { return dis(randgen); });
 
   auto ctx = EVP_MD_CTX_new();
   if (ctx == nullptr) {
@@ -77,11 +71,11 @@ int generate_secret(uint8_t *secret, size_t secretlen) {
   return 0;
 }
 
-std::optional<std::string> read_token(const std::string_view &filename) {
+std::pair<std::string, int> read_token(const std::string_view &filename) {
   auto f = BIO_new_file(filename.data(), "r");
   if (f == nullptr) {
     std::cerr << "Could not open token file " << filename << std::endl;
-    return {};
+    return {"", -1};
   }
 
   auto f_d = defer(BIO_free, f);
@@ -92,7 +86,7 @@ std::optional<std::string> read_token(const std::string_view &filename) {
   std::string token;
   if (PEM_read_bio(f, &name, &header, &data, &datalen) != 1) {
     std::cerr << "Could not read token file " << filename << std::endl;
-    return {};
+    return {"", -1};
   }
 
   OPENSSL_free(name);
@@ -102,7 +96,7 @@ std::optional<std::string> read_token(const std::string_view &filename) {
 
   OPENSSL_free(data);
 
-  return res;
+  return {res, 0};
 }
 
 int write_token(const std::string_view &filename, const uint8_t *token,

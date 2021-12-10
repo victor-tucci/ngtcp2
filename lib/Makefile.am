@@ -58,14 +58,11 @@ OBJECTS = \
 	ngtcp2_cid.c \
 	ngtcp2_ksl.c \
 	ngtcp2_cc.c \
-	ngtcp2_bbr.c \
-	ngtcp2_bbr2.c \
 	ngtcp2_addr.c \
 	ngtcp2_path.c \
 	ngtcp2_pv.c \
 	ngtcp2_version.c \
-	ngtcp2_rst.c \
-	ngtcp2_window_filter.c
+	ngtcp2_rst.c
 
 HFILES = \
 	ngtcp2_pkt.h \
@@ -93,14 +90,11 @@ HFILES = \
 	ngtcp2_cid.h \
 	ngtcp2_ksl.h \
 	ngtcp2_cc.h \
-	ngtcp2_bbr.h \
-	ngtcp2_bbr2.h \
 	ngtcp2_addr.h \
 	ngtcp2_path.h \
 	ngtcp2_pv.h \
 	ngtcp2_macro.h \
 	ngtcp2_rst.h \
-	ngtcp2_window_filter.h \
 	ngtcp2_rcvry.h
 
 libngtcp2_la_SOURCES = $(HFILES) $(OBJECTS)

@@ -40,7 +40,7 @@ AM_INIT_AUTOMAKE([subdir-objects])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 # See versioning rule:
-#  https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
+#  http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
 AC_SUBST(LT_CURRENT, 0)
 AC_SUBST(LT_REVISION, 0)
 AC_SUBST(LT_AGE, 0)
@@ -131,16 +131,6 @@ AC_ARG_WITH([boringssl],
 AC_ARG_VAR([BORINGSSL_CFLAGS], [C compiler flags for BORINGSSL])
 AC_ARG_VAR([BORINGSSL_LIBS], [linker flags for BORINGSSL])
 
-AC_ARG_VAR([LIBEV_CFLAGS], [C compiler flags for libev, skipping any checks])
-AC_ARG_VAR([LIBEV_LIBS], [linker flags for libev, skipping any checks])
-
-AC_ARG_VAR([JEMALLOC_CFLAGS],
-           [C compiler flags for jemalloc, skipping any checks])
-AC_ARG_VAR([JEMALLOC_LIBS], [linker flags for jemalloc, skipping any checks])
-
-AC_ARG_VAR([LIBTOOL_LDFLAGS],
-           [libtool specific flags (e.g., -static-libtool-libs)])
-
 # Checks for programs
 AC_PROG_CC
 AC_PROG_CXX
@@ -153,13 +143,6 @@ AC_PROG_MKDIR_P
 PKG_PROG_PKG_CONFIG([0.20])
 
 AX_CXX_COMPILE_STDCXX([17], [noext], [optional])
-
-case "${build}" in
-  *-apple-darwin*)
-    EXTRA_DEFS="-D__APPLE_USE_RFC_3542"
-    AC_SUBST([EXTRA_DEFS])
-    ;;
-esac
 
 # Checks for libraries.
 
@@ -247,7 +230,7 @@ AM_CONDITIONAL([HAVE_OPENSSL], [ test "x${have_openssl}" = "xyes" ])
 # GnuTLS (required for libngtcp2_crypto_gnutls)
 have_gnutls=no
 if test "x${request_gnutls}" != "xno"; then
-  PKG_CHECK_MODULES([GNUTLS], [gnutls >= 3.7.2],
+  PKG_CHECK_MODULES([GNUTLS], [gnutls >= 3.7.0],
                     [have_gnutls=yes], [have_gnutls=no])
   if test "x${have_gnutls}" = "xno"; then
     AC_MSG_NOTICE($GNUTLS_PKG_ERRORS)
@@ -316,6 +299,9 @@ fi
 
 AM_CONDITIONAL([HAVE_NGHTTP3], [ test "x${have_libnghttp3}" = "xyes" ])
 
+AC_ARG_VAR([LIBEV_CFLAGS], [C compiler flags for libev, skipping any checks])
+AC_ARG_VAR([LIBEV_LIBS], [linker flags for libev, skipping any checks])
+
 # libev (required for examples)
 have_libev=no
 if test "x${request_libev}" != "xno"; then
@@ -329,6 +315,8 @@ if test "x${request_libev}" != "xno"; then
       if test "x${have_libev}" = "xyes"; then
         LIBEV_LIBS=-lev
         LIBEV_CFLAGS=
+        AC_SUBST([LIBEV_LIBS])
+        AC_SUBST([LIBEV_CFLAGS])
       fi
     fi
     LIBS=$save_LIBS
@@ -370,6 +358,9 @@ AM_CONDITIONAL([ENABLE_EXAMPLE_OPENSSL], [ test "x${enable_examples}" = "xyes" &
 AM_CONDITIONAL([ENABLE_EXAMPLE_GNUTLS], [ test "x${enable_examples}" = "xyes" && test "x${have_gnutls}" = "xyes" ])
 AM_CONDITIONAL([ENABLE_EXAMPLE_BORINGSSL], [ test "x${enable_examples}" = "xyes" && test "x${have_boringssl}" = "xyes" ])
 
+AC_ARG_VAR([JEMALLOC_CFLAGS], [C compiler flags for jemalloc, skipping any checks])
+AC_ARG_VAR([JEMALLOC_LIBS], [linker flags for jemalloc, skipping any checks])
+
 # jemalloc
 have_jemalloc=no
 if test "x${request_jemalloc}" != "xno"; then
@@ -395,6 +386,7 @@ if test "x${request_jemalloc}" != "xno"; then
     if test "x${have_jemalloc}" = "xyes" &&
        test "x${jemalloc_libs}" != "xnone required"; then
       JEMALLOC_LIBS=${jemalloc_libs}
+      AC_SUBST([JEMALLOC_LIBS])
     fi
   else
     have_jemalloc=yes
@@ -405,6 +397,9 @@ if test "x${request_jemalloc}" = "xyes" &&
    test "x${have_jemalloc}" != "xyes"; then
   AC_MSG_ERROR([jemalloc was requested (--with-jemalloc) but not found])
 fi
+
+AC_ARG_VAR([LIBTOOL_LDFLAGS],
+           [libtool specific flags (e.g., -static-libtool-libs)])
 
 # Checks for header files.
 AC_CHECK_HEADERS([ \
@@ -418,9 +413,6 @@ AC_CHECK_HEADERS([ \
   sys/endian.h \
   endian.h \
   byteswap.h \
-  asm/types.h \
-  linux/netlink.h \
-  linux/rtnetlink.h
 ])
 
 # Checks for typedefs, structures, and compiler characteristics.
@@ -620,7 +612,7 @@ AC_MSG_NOTICE([summary of build options:
       OpenSSL:        ${have_openssl} (CFLAGS='${OPENSSL_CFLAGS}' LIBS='${OPENSSL_LIBS}')
       Libev:          ${have_libev} (CFLAGS='${LIBEV_CFLAGS}' LIBS='${LIBEV_LIBS}')
       Libnghttp3:     ${have_libnghttp3} (CFLAGS='${LIBNGHTTP3_CFLAGS}' LIBS='${LIBNGHTTP3_LIBS}')
-      Jemalloc:       ${have_jemalloc} (CFLAGS='${JEMALLOC_CFLAGS}' LIBS='${JEMALLOC_LIBS}')
+      Jemalloc:       ${have_jemalloc} (LIBS='${JEMALLOC_LIBS}')
       GnuTLS:         ${have_gnutls} (CFLAGS='${GNUTLS_CFLAGS}' LIBS='${GNUTLS_LIBS}')
       BoringSSL:      ${have_boringssl} (CFLAGS='${BORINGSSL_CFLAGS}' LIBS='${BORINGSSL_LIBS}')
     Examples:         ${enable_examples}

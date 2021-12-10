@@ -29,11 +29,9 @@ if [ "$ROLE" == "client" ]; then
     else
 	CLIENT_BIN="/usr/local/bin/h09client"
     fi
-    CLIENT_ARGS="$SERVER 443 --download /downloads -s --no-quic-dump --no-http-dump --exit-on-all-streams-close --qlog-dir $QLOGDIR --cc bbr2"
+    CLIENT_ARGS="$SERVER 443 --download /downloads -s --no-quic-dump --no-http-dump --exit-on-all-streams-close --qlog-dir $QLOGDIR"
     if [ "$TESTCASE" == "versionnegotiation" ]; then
         CLIENT_ARGS="$CLIENT_ARGS -v 0xaaaaaaaa"
-    else
-	CLIENT_ARGS="$CLIENT_ARGS -v 0x1"
     fi
     if [ "$TESTCASE" == "chacha20" ]; then
 	CLIENT_ARGS="$CLIENT_ARGS --ciphers=TLS_CHACHA20_POLY1305_SHA256"
@@ -65,7 +63,7 @@ elif [ "$ROLE" == "server" ]; then
     else
 	SERVER_BIN="/usr/local/bin/h09server"
     fi
-    SERVER_ARGS="/certs/priv.key /certs/cert.pem -s -d /www --qlog-dir $QLOGDIR --cc bbr2"
+    SERVER_ARGS="/certs/priv.key /certs/cert.pem -s -d /www --qlog-dir $QLOGDIR"
     if [ "$TESTCASE" == "retry" ]; then
 	SERVER_ARGS="$SERVER_ARGS -V"
     elif [ "$TESTCASE" == "multiconnect" ]; then
